@@ -1,0 +1,13 @@
+{
+  "name": "benchmark-tools",
+  "owner": {
+    "name": "neural-sparse"
+  },
+  "plugins": [
+    {
+      "name": "benchmark-agent",
+      "source": ".",
+      "description": "Autonomous benchmark agent: plans experiments with fair comparison controls, deploys safety guardrails, runs skeptical analysis, manages result reliability, and prevents memory loss across runs."
+    }
+  ]
+}
