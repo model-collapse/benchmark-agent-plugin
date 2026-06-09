@@ -1,11 +1,11 @@
 {
   "name": "benchmark-agent",
-  "version": "1.0.0",
-  "description": "Autonomous benchmark agent with fair comparison, safety guardrails, skeptical analysis, and persistent result management. Plans, executes, monitors, and analyzes performance experiments on distributed systems.",
+  "version": "1.1.0",
+  "description": "Autonomous benchmark agent with fair comparison, safety guardrails, skeptical analysis, and persistent result management. Includes experiment awareness hooks that transparently detect benchmark work and load relevant context.",
   "author": {
     "name": "neural-sparse"
   },
-  "keywords": ["benchmark", "performance", "testing", "monitoring", "distributed-systems"],
+  "keywords": ["benchmark", "performance", "testing", "monitoring", "distributed-systems", "experiment-tracking"],
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
