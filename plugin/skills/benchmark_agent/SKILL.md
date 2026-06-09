@@ -143,17 +143,28 @@ Present plan to user. Wait for approval before proceeding.
 
 ### Step 2b: Generate Execution Scripts
 
-After plan approval, generate the three scripts for `/benchmark_run`:
+After plan approval, generate the four scripts for `/benchmark_run`:
 
-1. **`benchmark_data/scripts/execute_<id>.sh`** — The actual benchmark commands, organized by phase. Each phase wrapped with `log_event "PHASE_START/END"`. Includes ERR trap to write `.failed` signal. Ends with `.complete` signal on success.
+1. **`benchmark_data/scripts/guardrail_<id>.sh`** — Hard ceiling protection. Polls RSS every 5s, kills the benchmark process if RSS exceeds 85% of physical RAM for >10s sustained. Escalation: warn (75%, 30s) → SIGTERM (85%, 10s) → SIGKILL (92%, immediate). This is the node's last line of defense against OOM.
 
-2. **`benchmark_data/scripts/monitor_<id>.sh`** — Resource monitor loop. Reads RSS from each node via SSH. Writes CSV format: `timestamp,node,rss_kb,phase,status`. Exits when `.complete` or `.failed` signal appears.
+2. **`benchmark_data/scripts/execute_<id>.sh`** — The actual benchmark commands, organized by phase. Each phase wrapped with `log_event "PHASE_START/END"`. Includes ERR trap to write `.failed` signal. Ends with `.complete` signal on success.
 
-3. **`benchmark_data/scripts/check_<id>.sh`** — Quick status reporter for `/loop`. Outputs structured text: STATUS line, latest metrics, peak RSS, recent alerts. Designed to be parsed by the loop's Claude instance.
+3. **`benchmark_data/scripts/monitor_<id>.sh`** — Resource monitor loop. Reads RSS from each node via SSH. Writes CSV format: `timestamp,node,rss_kb,phase,status`. Exits when `.complete` or `.failed` signal appears.
 
-Script parameters come from the plan:
+4. **`benchmark_data/scripts/check_<id>.sh`** — Quick status reporter for `/loop`. Outputs structured text: STATUS line, latest metrics, peak RSS, recent alerts. Designed to be parsed by the loop's Claude instance.
+
+**Guardrail script thresholds** are derived from the resource budget:
+```
+total_ram = <from environment.hardware>
+warn_ceiling = total_ram × 0.75
+hard_ceiling = total_ram × 0.85
+emergency_ceiling = total_ram × 0.92
+```
+
+If `estimated_peak > hard_ceiling`, the plan MUST be rejected — do not generate scripts for a workload that cannot fit safely.
+
+Other script parameters come from the plan:
 - Node list and SSH config from `environment.access`
-- Thresholds from `resource_budget` (warn=85%, critical=92%)
 - Phase commands from `phases` section
 - Monitor interval from guardrail config (default 30s)
 
@@ -162,6 +173,7 @@ Save plan to: `benchmark_data/plans/plan_<id>.md`
 After generating scripts, tell the user:
 ```
 Plan approved. Scripts generated:
+  benchmark_data/scripts/guardrail_<id>.sh  ← hard ceiling: kills at 85% RAM
   benchmark_data/scripts/execute_<id>.sh
   benchmark_data/scripts/monitor_<id>.sh
   benchmark_data/scripts/check_<id>.sh
