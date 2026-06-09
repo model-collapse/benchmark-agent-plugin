@@ -1,6 +1,6 @@
 {
   "name": "benchmark-agent",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Autonomous benchmark agent with fair comparison, safety guardrails, skeptical analysis, and persistent result management. Includes experiment awareness hooks that transparently detect benchmark work and load relevant context.",
   "author": {
     "name": "neural-sparse"

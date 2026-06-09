@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "benchmark-agent",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "source": "./plugin",
       "description": "Autonomous benchmark agent: plans experiments with fair comparison controls, deploys safety guardrails, runs skeptical analysis, manages result reliability, and prevents memory loss across runs."
     }
