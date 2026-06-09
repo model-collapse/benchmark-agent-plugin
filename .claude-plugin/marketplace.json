@@ -3,10 +3,15 @@
   "owner": {
     "name": "neural-sparse"
   },
+  "metadata": {
+    "description": "Benchmark and experiment management plugins",
+    "homepage": "https://github.com/model-collapse/benchmark-agent-plugin"
+  },
   "plugins": [
     {
       "name": "benchmark-agent",
-      "source": ".",
+      "version": "1.1.0",
+      "source": "..",
       "description": "Autonomous benchmark agent: plans experiments with fair comparison controls, deploys safety guardrails, runs skeptical analysis, manages result reliability, and prevents memory loss across runs."
     }
   ]
