@@ -95,88 +95,137 @@ Otherwise, I recommend: [alternative that maintains comparability]
 
 Accept if user provides rationale. Record the rationale in the plan.
 
-### Step 2: Produce Run Plan
+### Step 2: Produce Run Plan (Structured Log Schema)
 
-Generate a structured plan document:
+**Schema reference:** `BENCHMARK_LOG_SCHEMA.md` in plugin root or project directory.
+
+Create the run folder and generate all structured files:
+
+```bash
+mkdir -p "$BENCHMARK_HOME/runs/<run_id>/{scripts,artifacts}"
+```
+
+#### 2a: Generate `config.yaml` (MANDATORY — parameter alignment check)
+
+Load the most recent RELIABLE run's `config.yaml`. For EVERY parameter in that file:
+- If unchanged in this run → copy with `source: "inherited"`
+- If changed → mark as treatment variable or justify
+- If a parameter from baseline is MISSING from the new plan → **STOP AND ASK**
+
+```
+PARAMETER ALIGNMENT CHECK:
+
+The baseline run (<baseline_id>) set:
+  <parameter_name>: <value>
+
+Your request does not mention this parameter.
+  - Default value is: <default>
+  - Baseline used: <baseline_value>
+  - Impact of divergence: <what changes>
+
+Setting to <baseline_value> to maintain comparability.
+If you intend to test this parameter, make it the treatment variable.
+```
+
+The `config.yaml` must contain ALL of these sections:
+- `hypothesis` + `treatment_variable`
+- `hardware` (nodes, instance type, RAM, CPU, storage)
+- `cluster_settings` (every setting with value + source + command)
+- `index_settings` (name, shards, replicas, codec, quantization, all method params)
+- `algorithm` (every algorithm parameter with value + source)
+- `jvm` (heap, GC)
+- `os` (sysctl settings)
+- `dataset` (name, docs, format, path, avg_nnz, vocab_size)
+- `ingestion` (batch_size, threads, workers)
+- `resource_budget` (formula, estimated peak, headroom, verdict)
+- `controlled_variables` (each with verify command)
+
+#### 2b: Generate `README.md`
+
+Human-readable context:
+- Motivation and hypothesis (1-2 paragraphs)
+- Key decisions and trade-offs
+- Dependencies table (run_id, what's needed, status check command)
+- Data status verification commands (copy-paste ready)
+- Lessons applied (with references to lesson IDs)
+- Lessons/issues still open (checkbox list)
+
+#### 2c: Generate `lessons.yaml`
 
 ```yaml
-run_plan:
-  id: "<YYYY-MM-DD>-<slug>"
-  hypothesis: "<what we expect and why>"
-  treatment_variable:
-    name: "<what changes>"
-    control_value: "<baseline value>"
-    treatment_value: "<new value>"
-  controlled_variables:
-    - name: "<var>"
-      target: "<value>"
-      tolerance: "<acceptable range>"
-      verification: "<command to check>"
-  observed_metrics:
-    primary: [<metrics that must change>]
-    secondary: [<informational metrics>]
-    validation: [<metrics that must NOT change>]
-  phases:
-    - name: "<phase>"
-      dominant_resource: "<CPU|IO|memory|network>"
-      expected_duration: "<estimate>"
-      transition_signal: "<how to detect end>"
-  environment:
-    hardware: "<specs>"
-    software: "<versions>"
-    access:
-      endpoints: "<how to reach>"
-      ssh: "<node access>"
-      logs: "<where to find logs>"
-  resource_budget:
-    estimated_peak: "<formula and result>"
-    available: "<total - reserved>"
-    headroom: "<available - peak>"
-    verdict: "<SAFE|WARN|ABORT>"
-  comparability:
-    prior_run: "<run ID being compared against>"
-    prior_reliability: "<tag of prior run>"
-    deviation_justification: "<if any, from Step 1>"
+applied:
+  - id: "<lesson_id>"
+    title: "<from global lessons.md>"
+    action_taken: "<what was done>"
+    verified: <true|false>
+    verify_command: "<how to confirm>"
+
+remaining:
+  - id: "<lesson_id>"
+    title: "<from global lessons.md>"
+    status: "untested|mitigated|accepted_risk"
+    note: "<why it's relevant but unresolved>"
 ```
 
-Present plan to user. Wait for approval before proceeding.
+#### 2d: Generate run plan summary
 
-### Step 2b: Generate Execution Scripts
-
-After plan approval, generate the four scripts for `/benchmark_run`:
-
-1. **`benchmark_data/scripts/guardrail_<id>.sh`** — Hard ceiling protection. Polls RSS every 5s, kills the benchmark process if RSS exceeds 85% of physical RAM for >10s sustained. Escalation: warn (75%, 30s) → SIGTERM (85%, 10s) → SIGKILL (92%, immediate). This is the node's last line of defense against OOM.
-
-2. **`benchmark_data/scripts/execute_<id>.sh`** — The actual benchmark commands, organized by phase. Each phase wrapped with `log_event "PHASE_START/END"`. Includes ERR trap to write `.failed` signal. Ends with `.complete` signal on success.
-
-3. **`benchmark_data/scripts/monitor_<id>.sh`** — Resource monitor loop. Reads RSS from each node via SSH. Writes CSV format: `timestamp,node,rss_kb,phase,status`. Exits when `.complete` or `.failed` signal appears.
-
-4. **`benchmark_data/scripts/check_<id>.sh`** — Quick status reporter for `/loop`. Outputs structured text: STATUS line, latest metrics, peak RSS, recent alerts. Designed to be parsed by the loop's Claude instance.
-
-**Guardrail script thresholds** are derived from the resource budget:
+Present to user for approval:
 ```
-total_ram = <from environment.hardware>
+Run Plan: <run_id>
+  Hypothesis: <one line>
+  Treatment: <what changes>
+  Baseline: <prior run_id>
+  Resource budget: <verdict> (estimated <X> GB peak on <Y> GB node)
+  Parameters aligned: <N> params checked against baseline, <M> inherited, <K> changed
+
+  Config: benchmark_data/runs/<run_id>/config.yaml
+  README: benchmark_data/runs/<run_id>/README.md
+
+Approve to proceed with script generation.
+```
+
+Wait for approval before generating execution scripts.
+
+### Step 2e: Generate Execution Scripts
+
+After plan approval, generate scripts into `benchmark_data/runs/<run_id>/scripts/`:
+
+1. **`guardrail.sh`** — Hard ceiling protection. Thresholds from `config.yaml` resource_budget.
+
+2. **`execute.sh`** — Benchmark commands by phase. Each phase wrapped with `log_event "PHASE_START/END"`. ERR trap writes `.failed`. Success writes `.complete`.
+
+3. **`monitor.sh`** — RSS polling, CSV output to `artifacts/monitor.csv`.
+
+4. **`check.sh`** — Quick status for `/loop`.
+
+5. **`reproduce_deps.sh`** — Script to recreate prerequisite data (dataset, prior index state) if missing.
+
+6. **`CHANGELOG.md`** — Diff from baseline run's scripts. List every line/parameter that changed and why.
+
+**Guardrail script thresholds** are derived from `config.yaml` resource_budget:
+```
+total_ram = config.yaml → hardware.ram_gb
 warn_ceiling = total_ram × 0.75
 hard_ceiling = total_ram × 0.85
 emergency_ceiling = total_ram × 0.92
 ```
 
-If `estimated_peak > hard_ceiling`, the plan MUST be rejected — do not generate scripts for a workload that cannot fit safely.
-
-Other script parameters come from the plan:
-- Node list and SSH config from `environment.access`
-- Phase commands from `phases` section
-- Monitor interval from guardrail config (default 30s)
-
-Save plan to: `benchmark_data/plans/plan_<id>.md`
+If `estimated_peak > hard_ceiling`, the plan MUST be rejected — do not generate scripts.
 
 After generating scripts, tell the user:
 ```
-Plan approved. Scripts generated:
-  benchmark_data/scripts/guardrail_<id>.sh  ← hard ceiling: kills at 85% RAM
-  benchmark_data/scripts/execute_<id>.sh
-  benchmark_data/scripts/monitor_<id>.sh
-  benchmark_data/scripts/check_<id>.sh
+Plan approved. Run folder created:
+  benchmark_data/runs/<id>/
+    config.yaml       ← ALL parameters (N inherited, M changed)
+    README.md         ← motivation, dependencies, lessons
+    lessons.yaml      ← applied/remaining lessons
+    scripts/
+      guardrail.sh    ← hard ceiling: kills at 85% RAM
+      execute.sh
+      monitor.sh
+      check.sh
+      reproduce_deps.sh
+      CHANGELOG.md    ← diff from baseline scripts
 
 To launch: /benchmark_run <id>
 Or say "run it" and I'll invoke the runner.
@@ -302,12 +351,32 @@ Generate the mandatory report structure:
 <Recommendations>
 ```
 
-### Step 8: Persist Results
+### Step 8: Persist Results (Structured Log Schema)
 
-1. Save run record to `$BENCHMARK_HOME/runs/run_<date>_<slug>.md`
-2. Update results index (`$BENCHMARK_HOME/results_index.md`)
-3. Append new lessons to `$BENCHMARK_HOME/lessons.md`
-4. If prior run is invalidated, update its record and the index
+All outputs go into the run folder (`$BENCHMARK_HOME/runs/<run_id>/`):
+
+1. **Write `results.yaml`** — Machine-readable outcomes:
+   - `status`: COMPLETED | FAILED | ABORTED_PREFLIGHT | ABORTED_GUARDRAIL
+   - `reliability_tag`: RELIABLE | QUALIFIED | UNRELIABLE | EXPLORATORY
+   - `metrics`: all measured values (force_merge phases, search latency, recall, index size)
+   - `comparison`: fair/unfair, deviations from baseline, delta values
+   - `abort` section if run didn't complete (phase, reason, recommendation)
+
+2. **Update `lessons.yaml`** — Add `discovered` entries for new lessons found during this run
+
+3. **Save `artifacts/cluster_settings.json`** — Snapshot of actual cluster settings at run time (not planned, but actual — verify with GET /_cluster/settings)
+
+4. **Save `artifacts/index_settings.json`** — Actual index settings snapshot
+
+5. **Save `artifacts/monitor.csv`** — Time-series data from monitor script
+
+6. **Update `README.md`** — Fill in the "Outcome" section
+
+7. **Update global `INDEX.md`** — Add row to appropriate section (Active/Qualified/Invalidated/Aborted)
+
+8. **Update global `lessons.md`** — Append new lessons with source run ID
+
+9. If prior run is invalidated by this run's findings, update its `results.yaml` reliability_tag and the global index
 
 ## Reliability Tags
 
