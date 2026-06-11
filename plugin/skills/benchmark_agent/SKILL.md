@@ -105,7 +105,48 @@ Create the run folder and generate all structured files:
 mkdir -p "$BENCHMARK_HOME/runs/<run_id>/{scripts,artifacts}"
 ```
 
-#### 2a: Generate `config.yaml` (MANDATORY — parameter alignment check)
+#### 2a: Generate `config.yaml` (MANDATORY — TWO-LAYER alignment check)
+
+Two checks must both pass before config.yaml is considered complete:
+
+**Layer 1 — Domain Required-Parameters Manifest (HARD GATE)**
+
+```bash
+# Determine the domain from the request
+DOMAIN="<e.g. opensearch_forcemerge>"
+
+# Load the manifest
+MANIFEST="$BENCHMARK_HOME/domains/$DOMAIN/required_params.yaml"
+# (Falls back to plugin's bundled domains/ if no project-local override exists)
+```
+
+For EVERY parameter listed in `required_params.yaml`:
+- The new config.yaml MUST declare it explicitly with `value` + `source`
+- If missing → **BLOCK the plan, do not proceed**
+- Auto-suggest the manifest's `baseline_value` with the manifest's `reason`
+- Even if the value equals the system default, it MUST appear with `source: "default"` so future readers can see it was considered, not forgotten
+
+```
+DOMAIN MANIFEST CHECK FAILED:
+
+  Domain: opensearch_forcemerge
+  Missing required parameters in plan:
+    - index.merge.scheduler.max_thread_count
+        Reason: 14× stored-fields slowdown if mismatched (incident: 2026-06-11-eviction-merge-slowdown)
+        Baseline used: 4 | System default: 4
+        Suggested: 4 (source: "default", note: "matches baseline")
+
+    - index.merge.scheduler.auto_throttle
+        Reason: Disabling removes the I/O safety valve
+        Baseline used: true | System default: true
+        Suggested: true (source: "default")
+
+These parameters MUST be declared explicitly. The manifest exists because
+prior runs were invalidated by silent changes to these. Add them to your
+plan and re-submit.
+```
+
+**Layer 2 — Baseline Alignment (SOFT GATE — challenges with rationale)**
 
 Load the most recent RELIABLE run's `config.yaml`. For EVERY parameter in that file:
 - If unchanged in this run → copy with `source: "inherited"`
@@ -127,18 +168,20 @@ Setting to <baseline_value> to maintain comparability.
 If you intend to test this parameter, make it the treatment variable.
 ```
 
-The `config.yaml` must contain ALL of these sections:
+**Section coverage requirement.** The `config.yaml` must contain ALL of these sections:
+- `domain` (top-level, points to the manifest used)
 - `hypothesis` + `treatment_variable`
 - `hardware` (nodes, instance type, RAM, CPU, storage)
 - `cluster_settings` (every setting with value + source + command)
 - `index_settings` (name, shards, replicas, codec, quantization, all method params)
+- `index_merge_settings` (NEW: scheduler thread count, max_merge_count, auto_throttle, policy params)
 - `algorithm` (every algorithm parameter with value + source)
 - `jvm` (heap, GC)
 - `os` (sysctl settings)
 - `dataset` (name, docs, format, path, avg_nnz, vocab_size)
 - `ingestion` (batch_size, threads, workers)
 - `resource_budget` (formula, estimated peak, headroom, verdict)
-- `controlled_variables` (each with verify command)
+- `controlled_variables` (each with verify command — must include EVERY manifest entry)
 
 #### 2b: Generate `README.md`
 
@@ -377,6 +420,31 @@ All outputs go into the run folder (`$BENCHMARK_HOME/runs/<run_id>/`):
 8. **Update global `lessons.md`** — Append new lessons with source run ID
 
 9. If prior run is invalidated by this run's findings, update its `results.yaml` reliability_tag and the global index
+
+10. **Drift Detection (Manifest Promotion Candidates)**
+
+    Diff `artifacts/cluster_settings.json` and `artifacts/index_settings.json` against the baseline run's snapshots. For every key under:
+    - `index.merge.*`
+    - `index.translog.*`
+    - `index.refresh_interval`
+    - `cluster.routing.allocation.*`
+    - `thread_pool.*`
+    - `plugins.neural_search.*`
+
+    If a value changed AND the parameter is NOT already in `domains/<domain>/required_params.yaml`:
+    - Flag in `results.yaml` under `drift_detected` section
+    - Print to user:
+      ```
+      DRIFT DETECTED — manifest promotion candidate:
+        Parameter: <name>
+        Baseline: <value>
+        This run: <value>
+        Recommendation: Add to domains/<domain>/required_params.yaml
+        Reason: <inferred from impact analysis>
+      ```
+    - User decides whether to promote (edit manifest) or accept the divergence
+
+    This is the mechanism that makes the manifest GROW over time. Every run is a chance to catch a previously-invisible parameter.
 
 ## Reliability Tags
 

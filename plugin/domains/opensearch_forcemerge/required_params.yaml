@@ -1,0 +1,161 @@
+# Required Parameters Manifest: OpenSearch Force-Merge Benchmarks
+#
+# Every config.yaml for a force-merge benchmark MUST declare each parameter
+# below. Preflight rejects the run if any are missing.
+#
+# A parameter ends up here when a prior run was invalidated because this
+# parameter was silently changed (or silently inherited a default that
+# differed across runs). The manifest grows; entries are never removed.
+#
+# Schema:
+#   <param_path>:
+#     since: "YYYY-MM-DD"           # When this was added to the manifest
+#     reason: "short rationale"     # Why this matters
+#     incident: "<run_id>"          # The run whose failure forced this entry
+#     default: <value>              # System default (for awareness)
+#     baseline_value: <value>       # Value the most recent RELIABLE run used
+#     verify: "<command>"           # How to read the actual value at preflight
+#     impact_if_drift: "<text>"     # What goes wrong if this changes silently
+
+schema_version: "1.0"
+domain: "opensearch_forcemerge"
+
+required_params:
+
+  index.merge.scheduler.max_thread_count:
+    since: "2026-06-11"
+    reason: "Controls concurrent merge thread count per shard. High values multiply per-instance side effects (e.g. eviction threads) and shift the merge from CPU-bound to I/O-thrash."
+    incident: "2026-06-11-eviction-merge-slowdown"
+    default: 4
+    baseline_value: 4
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.scheduler.max_thread_count // \"DEFAULT(4)\"'"
+    impact_if_drift: "16 threads with persistent eviction → 14× slower stored-fields merge (mmap thrash). 06-08 baseline used 4."
+
+  index.merge.scheduler.max_merge_count:
+    since: "2026-06-11"
+    reason: "Bounds the merge queue depth. Defaults are tuned for general workloads; force-merge of large segments benefits from low queue depth, not high."
+    incident: "2026-06-11-eviction-merge-slowdown"
+    default: 9
+    baseline_value: 9
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.scheduler.max_merge_count // \"DEFAULT(9)\"'"
+    impact_if_drift: "32 with persistent eviction → many concurrent SparseStoredFieldsWriter instances → aggregate eviction every 30-60s vs the intended 600s."
+
+  index.merge.scheduler.auto_throttle:
+    since: "2026-06-11"
+    reason: "OpenSearch's adaptive merge throttling. Disabling it removes the safety valve that backs off when I/O is saturated."
+    incident: "2026-06-11-eviction-merge-slowdown"
+    default: true
+    baseline_value: true
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.scheduler.auto_throttle // \"DEFAULT(true)\"'"
+    impact_if_drift: "false + 16 threads + persistent eviction → page cache thrashed by both eviction AND uncapped concurrent reads."
+
+  index.merge.policy.max_merged_segment:
+    since: "2026-06-10"
+    reason: "Without this set, Lucene defaults to ~5GB segments and forcemerge to 1 cannot complete in one pass."
+    incident: "2026-06-10-138m-3node-distributed"
+    default: "5gb"
+    baseline_value: "500gb"
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.policy.max_merged_segment'"
+    impact_if_drift: "Default 5gb → multiple intermediate merge rounds, 92+ min wasted (L14 in lessons.md)."
+
+  index.merge.policy.segments_per_tier:
+    since: "2026-06-11"
+    reason: "Influences how many segments accumulate before a merge round triggers. Affects starting segment count, which interacts with merge-time eviction load."
+    incident: "2026-06-11-eviction-merge-slowdown"
+    default: 10
+    baseline_value: 5
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.policy.segments_per_tier // \"DEFAULT(10)\"'"
+    impact_if_drift: "Different segments_per_tier → different starting segment count → different number of concurrent merges → different eviction-thread aggregate frequency."
+
+  index.merge.policy.floor_segment:
+    since: "2026-06-11"
+    reason: "Smallest segment size considered for merging. Small floor + many small segments creates merge storm during force-merge."
+    incident: "2026-06-11-eviction-merge-slowdown"
+    default: "2mb"
+    baseline_value: "5mb"
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.merge.policy.floor_segment // \"DEFAULT(2mb)\"'"
+    impact_if_drift: "Smaller floor → more small-segment merges queued → higher concurrent SparseStoredFieldsWriter count."
+
+  plugins.neural_search.sparse.algo_param.index_thread_qty:
+    since: "2026-05-30"
+    reason: "OMP thread count for native SEISMIC build. Default of 1 takes 50+ hours."
+    incident: "2026-05-28-first-attempt"
+    default: 1
+    baseline_value: 32
+    verify: "curl -s http://localhost:19200/_cluster/settings?include_defaults=true | jq '.. | objects | .plugins?.neural_search?.sparse?.algo_param?.index_thread_qty // empty' | head -1"
+    impact_if_drift: "Default=1 → buildIndex takes ~50 hours instead of ~4 hours (L2 in lessons.md)."
+
+  plugins.neural_search.sparse.algo_param.search_thread_qty:
+    since: "2026-06-11"
+    reason: "Search-time concurrency for native SEISMIC. Affects search latency benchmarks downstream."
+    incident: "(preventive — not yet caused an incident, but parallel to index_thread_qty)"
+    default: 8
+    baseline_value: 8
+    verify: "curl -s http://localhost:19200/_cluster/settings?include_defaults=true | jq '.. | objects | .plugins?.neural_search?.sparse?.algo_param?.search_thread_qty // empty' | head -1"
+    impact_if_drift: "Affects search p50/p95/p99 — would make latency comparisons unfair."
+
+  plugins.neural_search.circuit_breaker.limit:
+    since: "2026-06-11"
+    reason: "Memory ceiling that triggers OpenSearch circuit breaker. Affects whether large native operations succeed or are interrupted."
+    incident: "(preventive — based on deploy_cluster.sh setting it to 95%)"
+    default: "85%"
+    baseline_value: "95%"
+    verify: "curl -s http://localhost:19200/_cluster/settings?include_defaults=true | jq '.. | objects | .plugins?.neural_search?.circuit_breaker?.limit // empty' | head -1"
+    impact_if_drift: "Lower limit → CB trips earlier → run aborted at lower memory level."
+
+  index.refresh_interval:
+    since: "2026-06-11"
+    reason: "Refresh frequency during ingestion. Defaults to 1s which fragments segments badly during bulk ingestion."
+    incident: "(preventive)"
+    default: "1s"
+    baseline_value: "-1"
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.refresh_interval'"
+    impact_if_drift: "1s during ingestion → many tiny segments → starting segment count explodes → see eviction incident."
+
+  index.translog.flush_threshold_size:
+    since: "2026-06-11"
+    reason: "Translog size before forced flush. Smaller threshold = more frequent commits = more segments at start of merge."
+    incident: "(preventive)"
+    default: "512mb"
+    baseline_value: "10gb"
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.translog.flush_threshold_size'"
+    impact_if_drift: "Default → many small flushes → many small segments → higher merge concurrency."
+
+  index.translog.durability:
+    since: "2026-06-11"
+    reason: "Sync vs async translog. Sync default cuts ingestion throughput ~3x for sparse vector workloads."
+    incident: "(preventive)"
+    default: "request"
+    baseline_value: "async"
+    verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.translog.durability'"
+    impact_if_drift: "request (default) → 3K docs/s instead of 8.5K docs/s → ingestion phase 3x longer."
+
+# --- How the agent uses this manifest ---
+#
+# At plan time:
+#   1. Load this manifest
+#   2. For each required_param, verify config.yaml declares it
+#   3. If any are missing → BLOCK the plan, show the user the missing list
+#   4. Auto-suggest values from baseline_value (with note explaining why)
+#
+# At preflight:
+#   1. Run each `verify` command against the actual cluster
+#   2. Compare actual value to declared value in config.yaml
+#   3. If they differ → BLOCK execution, force user to reconcile
+#
+# At post-run:
+#   1. Snapshot actual cluster state to artifacts/
+#   2. If a parameter NOT in this manifest changed materially compared to
+#      the baseline run → flag for review (candidate for promotion)
+
+# --- How entries get added ---
+#
+# Triggered by:
+#   - A run was invalidated because of a silent parameter change
+#   - A code review or post-mortem identifies a "this could have bitten us" param
+#   - Domain expert proactively adds a known-fragile parameter
+#
+# Process:
+#   1. Add entry with `since`, `reason`, `incident`, `default`, `baseline_value`
+#   2. Update lessons.md with the corresponding lesson
+#   3. Bump schema version if structure changes

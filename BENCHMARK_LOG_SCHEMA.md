@@ -8,6 +8,14 @@ LLMs lose context across sessions. Prose-format run records allow critical param
 
 **Solution:** A structured schema where every relevant parameter is explicitly declared (set or default), dependencies are machine-parseable, and lessons are coupled to the runs that produced them.
 
+### The "invisible default" problem (v1.1 addition)
+
+The original schema caught most divergences via baseline-config.yaml diffing. But it had a coverage gap: **if a parameter was never listed in any prior config.yaml (because all prior runs left it at its system default), the alignment check could not detect when a new run silently changed it.**
+
+This bit us in the 2026-06-11 eviction-merge-slowdown incident. `index.merge.scheduler.max_thread_count` was never listed in any prior config.yaml — every prior run had inherited the cluster default of 4. A subsequent run set it to 16 (along with `max_merge_count=32` and `auto_throttle=false`), interacted catastrophically with the persistent-eviction patch, and produced a 14× stored-fields merge slowdown. The agent's parameter alignment check did not catch the change because the parameter wasn't in any baseline.
+
+**Fix:** Domain Required-Parameters Manifests (`domains/<domain>/required_params.yaml`). The manifest is a per-domain checklist of parameters that MUST be declared in every config.yaml — independent of whether prior runs declared them. Entries are added when forensic investigation finds a parameter that "ever surprised us." The manifest grows monotonically.
+
 ---
 
 ## Directory Structure
@@ -19,6 +27,10 @@ benchmark_data/
 ├── risks.md                         # Known fragilities and scaling limits
 ├── settings/                        # Cluster/environment documentation
 │   └── seismic_cluster.md
+│
+├── domains/                         # Per-domain required-parameters manifests
+│   └── <domain>/
+│       └── required_params.yaml     # Hard-gate checklist for runs in this domain
 │
 └── runs/
     └── <run_id>/                    # One folder per run (YYYY-MM-DD-<slug>)
