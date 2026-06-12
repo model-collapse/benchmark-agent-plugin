@@ -130,6 +130,27 @@ required_params:
     verify: "curl -s http://localhost:19200/<index>/_settings | jq '.[].settings.index.translog.durability'"
     impact_if_drift: "request (default) → 3K docs/s instead of 8.5K docs/s → ingestion phase 3x longer."
 
+  index.sparse:
+    since: "2026-06-12"
+    reason: "Activates the SparseCodec (which routes through SparseStoredFieldsWriter + SparseDocValuesConsumer). Without this setting Lucene's default codec runs and sparse-codec code paths are not exercised at all. The setting is Final (cannot be added after index creation), so omitting it requires re-creating the index."
+    incident: "2026-06-12-directory-evictor (false-positive 'fix deployed' result)"
+    default: false
+    baseline_value: true
+    verify: "curl -s http://localhost:19200/<index>/_settings?include_defaults=true | jq '.[].settings.index.sparse // .[].defaults.index.sparse'"
+    impact_if_drift: "false → SparseCodec not used → SparseStoredFieldsWriter/SparseDocValuesConsumer never instantiated → any change to those classes is dead code. A run claiming to validate sparse-codec changes is meaningless without this."
+
+  # --- Code-path verification (not a setting, but a required preflight check) ---
+  # A run that purports to validate sparse-codec code MUST trigger a smoke test
+  # that confirms the codec is actually engaged. See `domains/opensearch_forcemerge/preflight_codepath_smoke.md`.
+  __codepath_smoke_test_required:
+    since: "2026-06-12"
+    reason: "Class on disk does not imply class is invoked. Several incidents (eviction-merge-slowdown, directory-evictor false positive) traced to this gap."
+    incident: "2026-06-12-directory-evictor"
+    default: "skipped"
+    baseline_value: "ran and confirmed"
+    verify: "Smoke test in preflight: ingest a few thousand docs, force a merge that crosses approximate_threshold, jstack the JVM mid-merge, grep for SparseDocValuesConsumer/SparseStoredFieldsWriter/DirectoryEvictor in stacks. ZERO matches → abort run."
+    impact_if_drift: "Run completes 'successfully' but validates nothing — false-positive that the fix works."
+
 # --- How the agent uses this manifest ---
 #
 # At plan time:

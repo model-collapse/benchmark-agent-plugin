@@ -480,7 +480,44 @@ NEVER celebrate before verifying measurement validity
 NEVER cite UNRELIABLE runs as evidence
 NEVER silently proceed with misaligned request
 NEVER delete run records — reclassify instead
+
+NEVER conflate "code is deployed" with "code is invoked"
+NEVER claim a run validates a fix without exercising the affected code path
+NEVER skip extracting parameters from a "current vs baseline" confound table
 ```
+
+## Code-Path Validation Protocol (MANDATORY for code-change runs)
+
+When a run's purpose is "validate code change X," **deployment alone is insufficient evidence that X is being exercised.** Multiple prior incidents traced to this confusion (eviction-merge-slowdown false positive, directory-evictor false positive). To prevent recurrence, every code-change validation run MUST:
+
+1. **Identify the code path under test.** Name the specific class(es)/method(s) the change modifies. Record in `config.yaml` under `code_under_test:`.
+
+2. **Identify the activation condition.** What index settings, cluster settings, query patterns, or document-count thresholds must hold for that code to run? List them as required `controlled_variables`. Common gotchas:
+   - Codec activation often requires a specific `index.<setting>` (e.g. `index.sparse: true`) — these are usually `Final` and must be set at index creation.
+   - Some codepaths only fire above a doc-count or size threshold (e.g. `approximate_threshold` for SEISMIC native build).
+   - Some hooks only run during specific phases (merge, search, refresh).
+
+3. **Smoke-test the path BEFORE the long benchmark.** Run a minimal scenario (small index, few thousand docs) that triggers the affected code. Capture proof:
+   - jstack mid-operation, grep for the new class name. ZERO matches → abort.
+   - Look for new log lines emitted by the changed code.
+   - Compare against the SAME smoke test on the unchanged code (negative control).
+
+4. **Reproduce the failure-mode signature first** (when validating a fix): the unfixed code must produce the symptom under these conditions. Otherwise "fix works" is unfalsifiable.
+
+5. **At runtime, monitor for the signature.** Define what "the fix is being exercised" looks like (e.g. for DirectoryEvictor: "DirectoryEvictor cycle" log lines, or attached writers). Log warnings if absent at expected times.
+
+If any of these steps cannot be completed, the run's reliability tag is `EXPLORATORY` regardless of outcome.
+
+## Confound-Table Extraction Protocol
+
+When the user provides a forensic/investigation document that includes a "current vs baseline" comparison table (or any side-by-side parameter listing), **mechanically extract every row**:
+
+1. **Differences** → treatment variable or controlled variable in config.yaml.
+2. **"Unknown" cells** → flag for investigation; the baseline is unverified for that parameter.
+3. **Same values** → record explicitly with `source: "matches_baseline"` (don't omit).
+4. **Promote to manifest** every parameter that produced a behavioral difference, even if the row says "unknown" on either side. Unknown is itself a finding.
+
+Doing this manually is error-prone. The agent's job is to do it systematically.
 
 ## Results Index Format
 
