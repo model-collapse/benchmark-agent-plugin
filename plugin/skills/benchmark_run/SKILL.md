@@ -358,7 +358,16 @@ done
 
 ```bash
 #!/bin/bash
+# IMPORTANT: do NOT use `set -e` together with a global ERR trap. Polling
+# loops contain commands that legitimately return non-zero (curl --max-time,
+# pgrep with no match, etc.). With `set -e + trap ERR`, every transient
+# blip aborts the whole orchestrator while remote work continues without
+# supervision. See lessons.md L23+ for the v1/v2/v3 incidents this caused.
+#
+# Use `set -uo pipefail` only. Wrap critical sections with explicit
+# `|| fail "..."`. Wrap polling sections with `set +e` / `set -e` toggles.
 set -uo pipefail
+
 RUN_ID="<id>"
 BENCH_HOME="${BENCHMARK_HOME:-./benchmark_data}"
 LOG_DIR="$BENCH_HOME/monitors"
@@ -366,23 +375,53 @@ EVENTS_LOG="$LOG_DIR/${RUN_ID}_events.log"
 SIGNAL_COMPLETE="$LOG_DIR/${RUN_ID}.complete"
 SIGNAL_FAILED="$LOG_DIR/${RUN_ID}.failed"
 
-log_event() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" >> "$EVENTS_LOG"; }
+log_event() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$EVENTS_LOG"; }
 
-trap 'log_event "UNEXPECTED_EXIT: exit_code=$?"; touch "$SIGNAL_FAILED"' ERR
+fail() {
+    log_event "FAILED: $1"
+    touch "$SIGNAL_FAILED"
+    exit 1
+}
+
+# Recommended: set ERR trap ONLY around critical setup phases (preflight,
+# index creation, plugin deploy). DISABLE it during polling/monitoring loops.
+# Re-enable for cleanup/teardown. See "polling loop" example below.
 
 log_event "RUN_START: $RUN_ID"
 
-# === PHASE 1: <name> ===
+# === PHASE 1: critical setup (ERR trap enabled) ===
+trap 'fail "execute.sh hit ERR trap (last cmd: $BASH_COMMAND)"' ERR
 log_event "PHASE_START: <phase_1_name>"
-<phase_1_commands>
+<phase_1_commands_must_succeed>
 log_event "PHASE_END: <phase_1_name>"
 
-# === PHASE 2: <name> ===
-log_event "PHASE_START: <phase_2_name>"
-<phase_2_commands>
-log_event "PHASE_END: <phase_2_name>"
+# === PHASE 2: long polling loop (ERR trap DISABLED) ===
+trap - ERR
+set +e
+log_event "PHASE_START: <phase_2_polling>"
+while true; do
+    out=$(curl --max-time 30 ... 2>/dev/null)   # transient failures are tolerated
+    [ -n "$out" ] && process "$out"
+    sleep 60
+    # break condition...
+done
+log_event "PHASE_END: <phase_2_polling>"
+trap 'fail "execute.sh hit ERR trap (last cmd: $BASH_COMMAND)"' ERR
+set -e
 
-# ... more phases ...
+# === PHASE 3: ssh+nohup (use the detachment pattern, NOT bare `ssh ... &`) ===
+# WRONG (hangs because ssh inherits the nohup'd process's fds):
+#   ssh "$node" "cd /path && nohup ./bin/run > log 2>&1 &"
+# RIGHT:
+ssh -o ConnectTimeout=10 "$node" \
+    'cd /path && nohup bash -c "exec ./bin/run" </dev/null >log 2>&1 & disown; exit 0' \
+    || fail "could not start on $node"
+
+# === PHASE 4: pgrep self-match avoidance ===
+# WRONG (matches its own command line):
+#   pgrep -f opensearch.bootstrap.OpenSearch
+# RIGHT:
+PID=$(ssh "$node" "pgrep -f '[o]pensearch.bootstrap.OpenSearch' | head -1")
 
 log_event "RUN_COMPLETE: $RUN_ID"
 touch "$SIGNAL_COMPLETE"
@@ -410,8 +449,11 @@ INTERVAL=<interval_seconds>
 
 get_rss() {
   local node=$1
+  # IMPORTANT: use the [bracket] regex trick in pgrep so it doesn't match its
+  # own command line. e.g. pgrep -f '[o]pensearch.bootstrap.OpenSearch'
+  # The bare form (without brackets) returns the wrong PID and breaks RSS reads.
   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$node" \
-    "<rss_command>" 2>/dev/null || echo "0"
+    "<rss_command_using_bracket_pgrep>" 2>/dev/null || echo "0"
 }
 
 get_phase() {
@@ -590,4 +632,9 @@ ALWAYS launch guardrail FIRST, then monitor, then execution
 ALWAYS verify ALL THREE PIDs are alive before confirming launch
 ALWAYS restart guardrail immediately if found dead during resume
 ALWAYS preserve all log files even from failed/killed runs
+
+NEVER use `set -e + trap 'fail' ERR` inside polling loops (added 2026-06-13)
+NEVER use bare `ssh ... 'nohup ... &'` — it hangs because ssh inherits fds
+ALWAYS use the [bracket]-regex pgrep pattern to avoid self-matching
+ALWAYS write a final results.yaml even on failure (so the run is visible)
 ```
