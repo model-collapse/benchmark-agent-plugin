@@ -67,6 +67,56 @@ ls "$MONITORS_DIR"/*.running 2>/dev/null && { echo "ERROR: Another benchmark is 
 touch "$MONITORS_DIR/${RUN_ID}.running"
 ```
 
+### Step 2.5: Preflight 3-Phase Gate (MANDATORY — added in v1.6.2)
+
+Three checks must pass BEFORE any script is launched. These enforce the
+"config.yaml is canonical" invariant. Each is a hard gate; failure aborts
+the launch with a clear remediation message.
+
+```bash
+# Resolve plugin's preflight scripts (bundled under templates/preflight/)
+PREFLIGHT_DIR="${CLAUDE_PLUGIN_ROOT:-/home/ubuntu/.claude/plugins/cache/benchmark-tools/benchmark-agent/1.6.2/plugin}/templates/preflight"
+[ -d "$PREFLIGHT_DIR" ] || PREFLIGHT_DIR="$RUN_DIR/scripts"  # fallback if user copied them
+
+# --- Phase A: Baseline diff ---
+BASELINE_DIR=$(awk -F: '/baseline_run:/ {gsub(/[ "]/, "", $2); print $2}' "$RUN_DIR/config.yaml" | head -1)
+if [ -n "$BASELINE_DIR" ] && [ -d "$BENCH_HOME/runs/$BASELINE_DIR" ]; then
+    log_event "PHASE_START: preflight_baseline_diff"
+    python3 "$PREFLIGHT_DIR/preflight_compare.py" \
+        --new-run "$RUN_DIR" \
+        --baseline "$BENCH_HOME/runs/$BASELINE_DIR" \
+        || fail "Phase A FAILED: baseline diff. See $RUN_DIR/artifacts/preflight_baseline_diff.txt"
+    log_event "PHASE_END: preflight_baseline_diff (PASS)"
+else
+    log_event "PHASE A SKIPPED: no baseline_run declared in config.yaml"
+fi
+
+# --- Phase B: Apply config (read yaml, push to cluster) ---
+# Phase B is domain-specific. The plugin ships templates/preflight/apply_config.py.template.
+# A run that wants Phase B copies it into scripts/apply_config.py and customizes the apply_*
+# functions for the target system (OpenSearch, etc.). If apply_config.py exists, run it:
+if [ -x "$RUN_DIR/scripts/apply_config.py" ]; then
+    log_event "PHASE_START: apply_config_from_yaml"
+    python3 "$RUN_DIR/scripts/apply_config.py" --run-dir "$RUN_DIR" \
+        || fail "Phase B FAILED: apply_config.py. See $RUN_DIR/artifacts/apply_config.log"
+    log_event "PHASE_END: apply_config_from_yaml (PASS)"
+else
+    log_event "PHASE B SKIPPED: $RUN_DIR/scripts/apply_config.py not present (config not auto-applied; execute.sh is responsible)"
+fi
+
+# --- Phase C: Post-deploy verify (cluster reality vs config.yaml declaration) ---
+log_event "PHASE_START: postdeploy_verify"
+python3 "$PREFLIGHT_DIR/postdeploy_check.py" --run-dir "$RUN_DIR" \
+    || fail "Phase C FAILED: cluster does not match config.yaml. See $RUN_DIR/artifacts/postdeploy_verify.txt"
+log_event "PHASE_END: postdeploy_verify (PASS)"
+```
+
+If `config.yaml` doesn't declare `controlled_variables` with `verify` commands,
+Phase C cannot run — the launch is aborted with a clear "config.yaml needs
+verify commands" message. Phase A is skipped only if no baseline is named (a
+true first-of-kind run). Phase B is skipped if no apply_config.py exists,
+under the assumption that execute.sh applies its settings inline.
+
 ### Step 3: Launch Guardrail (First — Non-Negotiable)
 
 The hard ceiling guardrail MUST be the first process started. It protects the node from OOM regardless of what the benchmark does.
