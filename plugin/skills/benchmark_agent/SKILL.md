@@ -274,21 +274,99 @@ To launch: /benchmark_run <id>
 Or say "run it" and I'll invoke the runner.
 ```
 
-### Step 3: Preflight Checks
+### Step 3: Preflight Checks (Three-Phase Mandatory Gate)
 
-Run all checks. Any failure blocks execution:
+Three checks are MANDATORY before any benchmark execution. Each is a hard gate
+— a failure blocks execution and requires explicit user approval to override.
+Together they enforce the "config.yaml is canonical" invariant introduced in
+the 2026-06-13 retrospective.
+
+#### Phase A — Baseline Diff (config.yaml ↔ baseline run's config.yaml)
 
 ```bash
-# 1. Target systems reachable
-# 2. System health nominal
-# 3. Resource baseline recorded
-# 4. Configuration matches plan (diff against expected)
-# 5. No active background tasks that could interfere
-# 6. Disk space sufficient
-# 7. Controlled variables within tolerance
+# Mechanically diff every key. The new run's config.yaml must declare every
+# parameter that appeared in the baseline.
+python3 scripts/preflight_compare.py --new-run "$RUN_DIR" --baseline "$BASELINE_RUN_DIR"
 ```
 
-Report preflight results as a checklist. If any item fails, stop and report.
+The diff output classifies each parameter:
+- **Match**: same value as baseline → OK
+- **Treatment variable**: declared in `config.yaml.treatment_variable` → OK
+- **Allowed drift**: declared in `config.yaml.expected_diff_from_baseline:` list → OK
+- **Unexpected diff**: not in any allowed-drift list → **BLOCK**
+- **Missing-from-new**: parameter in baseline but absent in new config → **BLOCK**
+
+If any unexpected diff or missing parameter is found, the script writes the
+full diff to `artifacts/preflight_baseline_diff.txt` and exits non-zero. To
+proceed, the user must either:
+1. Add the parameter to `config.yaml` with an explicit value, or
+2. Add an `expected_diff_from_baseline:` entry justifying the divergence.
+
+Blanket "ignore all diffs" overrides are forbidden.
+
+#### Phase B — Apply Config (config.yaml → cluster, single source of truth)
+
+Every parameter that the cluster will see at runtime must be derived from
+`config.yaml`. The execute script does NOT contain magic numbers.
+
+```bash
+python3 scripts/apply_config.py --run-dir "$RUN_DIR"
+```
+
+This script:
+1. Reads `config.yaml`
+2. Issues PUT calls for every cluster setting and index setting it declares
+3. SCPs JVM options + sysctl files derived from yaml
+4. Logs every change with a "what we asked for" line
+
+The script never reads hardcoded values from execute.sh. If a setting cannot
+be expressed via apply_config.py, it does NOT belong in config.yaml — extend
+the script first.
+
+#### Phase C — Post-Deploy Verify (cluster → config.yaml)
+
+After Phase B, query the cluster for the actual live values and compare them
+to what config.yaml declared. This catches:
+- Settings PUT returned 200 but the value didn't stick (Final settings on existing index)
+- Plugin or codec silently overrode the requested value
+- A typo in apply_config.py applied a different setting than declared
+- OS-level setting (sysctl) drifted from the declared value
+- Plugin jar swapped without the version check catching it
+
+```bash
+python3 scripts/postdeploy_check.py --run-dir "$RUN_DIR"
+```
+
+Output: `artifacts/postdeploy_verify.txt` listing every parameter, declared
+value, observed value, and a pass/fail. Any mismatch → **BLOCK**.
+
+#### Mid-run re-verification
+
+For runs that span hours, the executor SHOULD periodically re-run Phase C
+(e.g. once per hour) to catch settings that drift mid-run (auto-throttle
+flipping back, dynamic settings being reset, etc.). Drift at runtime gets
+logged but does not abort — the run is reclassified to QUALIFIED at minimum
+and the post-mortem must explain.
+
+#### Allowed-drift schema (mid-run artifact reuse)
+
+When reusing an existing index or partial state, declare what differences
+are tolerated and WHY:
+
+```yaml
+# config.yaml
+expected_diff_from_baseline:
+  - parameter: "index.merge.policy.segments_per_tier"
+    baseline_value: 5
+    new_value: 7
+    reason: "Index already exists with this setting; full reindex deferred"
+    accepted_by: "user"
+```
+
+Without an explicit reason+accepted_by, drift is rejected.
+
+Report preflight results as a checklist. If any phase fails, stop, write
+the diff to artifacts, and report.
 
 ### Step 4: Deploy Guardrails
 
@@ -394,16 +472,57 @@ Generate the mandatory report structure:
 <Recommendations>
 ```
 
+### Step 7.5: Functional Validation (MANDATORY for code-change runs)
+
+After execution and analysis, the run MUST validate that the system is still
+functionally correct, not just performant. This phase was added in v1.6.0
+after three runs (v1/v2/v3 directory-evictor) shipped without ever measuring
+search latency or recall — they validated "force-merge completes without OOM"
+but never "the index actually returns correct results."
+
+For every benchmark whose treatment touches code that affects index correctness,
+the run MUST execute:
+
+1. **Smoke search**: A single query against the freshly-merged index, asserting:
+   - Response status 200
+   - At least one hit
+   - Hit IDs are valid integers (not UUIDs — see L18)
+
+2. **Latency benchmark**: ≥1000 queries, report P50/P90/P95/P99/P999.
+
+3. **Recall benchmark**: If ground truth is available, compute recall@10 vs
+   the brute-force baseline.
+
+4. **Comparison vs baseline**: If a prior reliable run exists, the new run's
+   p50 must be within 30% AND recall@10 must be within 1 percentage point.
+   Larger deviations require explicit justification in the run report.
+
+A run that completes the build phases but skips this validation is reliability
+tag EXPLORATORY at best — never RELIABLE. The run report's "Verdict" line must
+include either:
+  - "Functional validation PASSED: p50=X recall@10=Y", or
+  - "Functional validation SKIPPED — reason: <explanation>"
+
+Empty/skipped is not the same as passed.
+
 ### Step 8: Persist Results (Structured Log Schema)
+
+**MANDATORY: Step 8 must execute even if Step 5/6/7 failed.** A run with no
+results.yaml is invisible to future agents and gets lost. The "we ran something
+and forgot to write it down" failure mode caused v1/v2/v3 to never get formally
+classified. Every run produces results.yaml + an INDEX.md update — pass, fail,
+or aborted. No exceptions.
 
 All outputs go into the run folder (`$BENCHMARK_HOME/runs/<run_id>/`):
 
-1. **Write `results.yaml`** — Machine-readable outcomes:
+1. **Write `results.yaml`** — Machine-readable outcomes (use the schema in
+   BENCHMARK_LOG_SCHEMA.md):
    - `status`: COMPLETED | FAILED | ABORTED_PREFLIGHT | ABORTED_GUARDRAIL
    - `reliability_tag`: RELIABLE | QUALIFIED | UNRELIABLE | EXPLORATORY
    - `metrics`: all measured values (force_merge phases, search latency, recall, index size)
    - `comparison`: fair/unfair, deviations from baseline, delta values
    - `abort` section if run didn't complete (phase, reason, recommendation)
+   - `functional_validation`: result of Step 7.5 (passed/skipped/failed + numbers)
 
 2. **Update `lessons.yaml`** — Add `discovered` entries for new lessons found during this run
 
@@ -450,14 +569,31 @@ All outputs go into the run folder (`$BENCHMARK_HOME/runs/<run_id>/`):
 
 | Tag | Can Cite as Baseline? | Rules |
 |-----|----------------------|-------|
-| RELIABLE | Yes | Full instrumentation, no confounds, mechanism explained |
-| QUALIFIED | Yes, with caveat | Valid data but known caveats exist |
+| RELIABLE | Yes | Full instrumentation, no confounds, mechanism explained, **AND independently reproduced in ≥1 separate run** |
+| QUALIFIED | Yes, with caveat | Valid data but known caveats exist; OR a single-run measurement |
 | UNRELIABLE | NO | Confounded, buggy, or invalidated |
 | EXPLORATORY | NO | Multi-variable or first-of-kind, informational only |
+
+### Reproducibility requirement (added 2026-06-13)
+
+A single-run measurement is QUALIFIED at most. To earn RELIABLE status, the
+key metrics (peak RSS, p50, recall@10, build time) must be reproduced in a
+follow-up run with the same `config.yaml` (modulo the run_id and timestamps).
+The follow-up's metrics must agree within a domain-specific tolerance:
+  - peak RSS: within 10%
+  - p50/p95/p99: within 20%
+  - recall@10: within 1 percentage point
+  - build time: within 30%
+
+The 2026-06-08-persistent-eviction-cfs run was tagged RELIABLE on a single
+measurement; subsequent attempts (v1/v2/v3, June 12-13) could not reproduce
+its 60 GB peak RSS, so retroactively the original tag was wrong. This rule
+prevents that class of failure.
 
 ### Downgrade triggers:
 - RELIABLE → QUALIFIED: minor confound, one node anomaly, non-critical bug found
 - RELIABLE → UNRELIABLE: critical bug affects metric, gross confound, measurement invalid
+- RELIABLE → QUALIFIED: a follow-up run cannot reproduce the key metrics within tolerance
 - Any tag → UNRELIABLE: later discovery proves the measurement was wrong
 
 ### Citation rules:
@@ -484,6 +620,66 @@ NEVER delete run records — reclassify instead
 NEVER conflate "code is deployed" with "code is invoked"
 NEVER claim a run validates a fix without exercising the affected code path
 NEVER skip extracting parameters from a "current vs baseline" confound table
+
+NEVER use `set -e + trap 'fail' ERR` inside a polling loop (added 2026-06-13)
+NEVER extrapolate a quantitative model from N=2 data points (added 2026-06-13)
+NEVER tag an Active Baseline (RELIABLE) from a single run (added 2026-06-13)
+NEVER skip the results.yaml write — the run record is mandatory regardless
+  of outcome
+```
+
+## Script Template Hardening (added 2026-06-13)
+
+Patterns that wasted hours during 06-12/06-13 runs and MUST be in any new
+template:
+
+### Polling loops MUST tolerate transient errors
+```bash
+# WRONG — every transient curl failure kills the orchestrator:
+set -uo pipefail
+trap 'fail "ERR trap"' ERR
+while true; do
+    curl ... || sleep 60   # this exits 1 → ERR fires → process dies
+done
+
+# RIGHT — disable strict mode inside the polling block:
+trap - ERR
+set +e
+while true; do
+    out=$(curl --max-time 30 ... 2>/dev/null)
+    if [ -n "$out" ]; then
+        # process the output
+    fi
+    sleep 60
+done
+trap 'fail "ERR trap"' ERR
+set -e   # re-enable for the next phase
+```
+
+### ssh+nohup pattern (anti-hang)
+```bash
+# WRONG — ssh inherits the nohup'd process's fds and waits for it:
+ssh node "cd /path && nohup ./bin/run > log 2>&1 &"
+
+# RIGHT — fully detach via heredoc-equivalent:
+ssh node 'cd /path && nohup bash -c "exec ./bin/run" </dev/null >log 2>&1 & disown; exit 0'
+```
+
+### pgrep self-match
+```bash
+# WRONG — matches its own command line via -f search:
+pgrep -f opensearch.bootstrap.OpenSearch
+
+# RIGHT — bracket trick prevents self-match:
+pgrep -f '[o]pensearch.bootstrap.OpenSearch'
+```
+
+### Cycle-count metrics across re-runs
+When grepping log files for diagnostic counts (e.g. "DirectoryEvictor cycle"),
+filter by run start timestamp. The cluster's log file accumulates entries from
+prior runs; without a time filter the count includes residue. Use:
+```bash
+grep "DirectoryEvictor" "$LOG" | awk -v cutoff="$RUN_START_ISO" '$1 > cutoff'
 ```
 
 ## Code-Path Validation Protocol (MANDATORY for code-change runs)

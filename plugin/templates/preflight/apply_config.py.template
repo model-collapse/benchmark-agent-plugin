@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""
+Phase B — Apply Config (config.yaml is the canonical source).
+
+Reads config.yaml and applies every parameter to the target system. The
+execute script must NOT contain hardcoded settings — they all come from yaml.
+
+This is a TEMPLATE. Copy it to your run's scripts/ and fill in the
+domain-specific apply functions (apply_cluster_setting, apply_index_setting,
+write_jvm_options, etc.).
+
+Contract:
+  - Reads config.yaml at $RUN_DIR/config.yaml
+  - For each section it knows how to apply, issues the change
+  - Logs every change to artifacts/apply_config.log
+  - Exits non-zero if any apply fails
+
+Usage:
+  apply_config.py --run-dir /path/to/runs/<id>
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML not installed", file=sys.stderr)
+    sys.exit(2)
+
+
+def es_curl(method, path, body=None, ssh_node="SEISMIC1"):
+    """ssh-tunneled curl. Replace with whatever your domain uses."""
+    cmd = ["ssh", "-o", "ConnectTimeout=5", ssh_node,
+           "curl", "-s", "--max-time", "30", "-X", method,
+           f"http://localhost:9200{path}"]
+    if body is not None:
+        cmd.extend(["-H", "Content-Type: application/json", "-d", json.dumps(body)])
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+
+def apply_cluster_settings(cluster_settings, log):
+    """Apply each setting via PUT /_cluster/settings."""
+    persistent = {}
+    for key, entry in (cluster_settings or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        val = entry.get("value")
+        source = entry.get("source", "default")
+        if source in ("set", "inherited"):
+            persistent[key] = val
+            log.write(f"  cluster_setting: {key} = {val} (source={source})\n")
+    if persistent:
+        body = {"persistent": persistent}
+        result = es_curl("PUT", "/_cluster/settings", body=body)
+        if result.returncode != 0 or '"acknowledged":true' not in result.stdout:
+            raise RuntimeError(f"Failed to PUT cluster settings: {result.stderr}")
+
+
+def apply_index_settings(index_name, index_settings, index_merge_settings, log):
+    """Apply each index setting via PUT /<index>/_settings."""
+    body = {}
+    # Flatten dotted keys
+    for src in (index_settings, index_merge_settings):
+        if not src:
+            continue
+        for key, entry in src.items():
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("source") in ("set", "inherited"):
+                # Convert key.like.this into proper path
+                # OpenSearch accepts both nested and dotted forms in settings PUT
+                body[f"index.{key}"] = entry.get("value")
+                log.write(f"  index_setting: index.{key} = {entry.get('value')}\n")
+    if body:
+        result = es_curl("PUT", f"/{index_name}/_settings", body=body)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to PUT index settings: {result.stderr}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run-dir", required=True)
+    ap.add_argument("--ssh-node", default="SEISMIC1")
+    args = ap.parse_args()
+
+    cfg_path = Path(args.run_dir) / "config.yaml"
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f)
+
+    log_path = Path(args.run_dir) / "artifacts" / "apply_config.log"
+    log_path.parent.mkdir(exist_ok=True)
+    with open(log_path, "w") as log:
+        log.write(f"Phase B — Apply Config from {cfg_path}\n\n")
+        try:
+            apply_cluster_settings(cfg.get("cluster_settings"), log)
+            index_name = (cfg.get("index_settings") or {}).get("index_name", {}).get("value")
+            if index_name:
+                apply_index_settings(index_name, cfg.get("index_settings"),
+                                     cfg.get("index_merge_settings"), log)
+            log.write("\nPHASE B: PASS\n")
+            print(f"PHASE B: PASS (log: {log_path})")
+        except Exception as e:
+            log.write(f"\nPHASE B: FAIL — {e}\n")
+            print(f"PHASE B: FAIL — {e}", file=sys.stderr)
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
