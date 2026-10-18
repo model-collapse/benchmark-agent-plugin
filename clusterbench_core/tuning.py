@@ -76,6 +76,7 @@ class Trial:
     reliability_tag: str = ""
     signature_diff: dict = field(default_factory=dict)
     memory_comparable: bool = False
+    stats: Any = None            # MeasureStats over replicates (None if replicates==1)
 
 
 @dataclass
@@ -141,7 +142,8 @@ class Tuner:
     def __init__(self, base: BenchmarkConfig, domain, workdir: str | Path,
                  primary_metric="p50_ms", minimize=True,
                  quality_metric: str | None = "recall@10", quality_floor: float | None = None,
-                 apply=True, budget: LoopBudget | None = None):
+                 apply=True, budget: LoopBudget | None = None,
+                 replicates: int = 1, mde: float = 0.03, cv_ceiling: float = 0.15):
         self.base = base
         self.domain = domain
         self.workdir = workdir
@@ -151,6 +153,9 @@ class Tuner:
         self.quality_floor = quality_floor
         self.apply = apply
         self.budget = budget or LoopBudget()
+        self.replicates = max(1, replicates)   # Gate 2: R independent measurement runs
+        self.mde = mde                          # minimum detectable (relative) effect
+        self.cv_ceiling = cv_ceiling
         self._cache: dict[tuple, Trial] = {}
 
     # ---- guard state ----
@@ -174,37 +179,69 @@ class Tuner:
             return result.metrics[name]
         return result.functional_validation.get(name)
 
-    def _eval(self, coords: dict[str, Any], incumbent: dict[str, Any], treatment: str) -> Trial:
-        key = tuple(sorted(coords.items()))
-        if key in self._cache:
-            return self._cache[key]
+    def _run_once(self, coords, incumbent, treatment, nonce):
         cfg = BenchmarkConfig.from_dict(copy.deepcopy(self.base.to_dict()))
         for name, val in coords.items():
             cfg.set_param(name, val, source="treatment" if name == treatment else "inherited")
         cfg.treatment_variable.name = treatment
         cfg.treatment_variable.value = coords[treatment]
         cfg.treatment_variable.baseline_value = incumbent.get(treatment)
+        cfg.repro_nonce = nonce  # distinct identity per replicate; prep (build-keyed) is reused
         baseline_cfg = BenchmarkConfig.from_dict(copy.deepcopy(self.base.to_dict()))
         for name, val in incumbent.items():
             baseline_cfg.set_param(name, val)
         baseline_cfg.treatment_variable.name = treatment
         baseline_cfg.treatment_variable.value = incumbent.get(treatment)
+        return run_lifecycle(cfg, self.domain, workdir=self.workdir,
+                             baseline=baseline_cfg, apply=self.apply).result
 
-        lr = run_lifecycle(cfg, self.domain, workdir=self.workdir,
-                           baseline=baseline_cfg, apply=self.apply)
-        r = lr.result
-        completed = r.status is RunStatus.COMPLETED
-        primary = self._metric(r, self.primary_metric) if completed else None
-        quality = self._metric(r, self.quality_metric) if self.quality_metric else None
-        feasible = (
-            completed and primary is not None
-            and (self.quality_floor is None or (quality is not None and quality >= self.quality_floor))
-        )
-        comparable = completed and r.reliability_tag in _COMPARABLE_TAGS and not r.signature_diff
+    def _eval(self, coords: dict[str, Any], incumbent: dict[str, Any], treatment: str) -> Trial:
+        import statistics
+
+        key = tuple(sorted(coords.items()))
+        if key in self._cache:
+            return self._cache[key]
+
+        results = [self._run_once(coords, incumbent, treatment, rep) for rep in range(self.replicates)]
+        r0 = results[0]
+        completed = [r for r in results if r.status is RunStatus.COMPLETED]
+        all_completed = len(completed) == self.replicates
+
+        primaries = [self._metric(r, self.primary_metric) for r in completed]
+        primaries = [p for p in primaries if p is not None]
+        stats = None
+        primary = None
+        if primaries:
+            primary = statistics.median(primaries)
+            if self.replicates > 1 and len(primaries) > 1:
+                from clusterbench_core.measurement import MeasureStats
+                sd = statistics.pstdev(primaries)
+                cv = sd / primary if primary else 0.0
+                stats = MeasureStats(median=primary, stdev=sd, cv=cv, n=len(primaries),
+                                     ci_lo=min(primaries), ci_hi=max(primaries), samples=list(primaries))
+
+        quality = None
+        if self.quality_metric:
+            qs = [self._metric(r, self.quality_metric) for r in completed]
+            qs = [q for q in qs if q is not None]
+            quality = statistics.median(qs) if qs else None
+
+        feasible = (all_completed and primary is not None
+                    and (self.quality_floor is None
+                         or (quality is not None and quality >= self.quality_floor)))
+        reps_comparable = all(
+            r.status is RunStatus.COMPLETED and r.reliability_tag in _COMPARABLE_TAGS and not r.signature_diff
+            for r in results)
+        if stats is not None:
+            from clusterbench_core.measurement import comparable_cv
+            reps_comparable = reps_comparable and comparable_cv(stats, self.cv_ceiling)
+        comparable = all_completed and reps_comparable
+
         trial = Trial(params=dict(coords), primary=primary, quality=quality, feasible=feasible,
-                      status=r.status.value, run_id=r.run_id, comparable=comparable,
-                      reliability_tag=r.reliability_tag.value, signature_diff=dict(r.signature_diff),
-                      memory_comparable=bool(r.measurement_flags.get("memory_comparable", False)))
+                      status=r0.status.value, run_id=r0.run_id, comparable=comparable,
+                      reliability_tag=r0.reliability_tag.value, signature_diff=dict(r0.signature_diff),
+                      memory_comparable=bool(r0.measurement_flags.get("memory_comparable", False)),
+                      stats=stats)
         self._cache[key] = trial
         self.trials.append(trial)
         self._record(trial)
@@ -252,6 +289,11 @@ class Tuner:
             return False
         if b is None:
             return True
+        # With replicates, require the improvement to exceed the measured noise
+        # (CI excludes 0 AND >= MDE) — never pick on sub-noise jitter.
+        if a.stats is not None and b.stats is not None:
+            from clusterbench_core.measurement import is_real_improvement
+            return is_real_improvement(b.stats, a.stats, mde=self.mde, minimize=self.minimize)
         return (a.primary < b.primary) if self.minimize else (a.primary > b.primary)
 
     # ---- strategies ----
