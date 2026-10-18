@@ -1,0 +1,82 @@
+# Required-parameters manifest: SEISMIC sparse-index benchmarks
+#
+# Every parameter here must be declared explicitly in a BenchmarkConfig. Each
+# earns its place because leaving it implicit makes a speed/recall comparison
+# uninterpretable (the index would differ in a way the reader can't see).
+
+schema_version: "1.0"
+domain: "seismic"
+
+required_params:
+
+  # --- corpus / encoding (defines the data; must match across compared runs) ---
+  corpus.n_docs:
+    reason: "Corpus size drives build time, index size, and search cost."
+    default: 50000
+    baseline_value: 50000
+    verify: "len(dataset)"
+  corpus.vocab_size:
+    reason: "Vocabulary dimension; changes posting-list density."
+    default: 30000
+    baseline_value: 30000
+    verify: "index.dim"
+  corpus.avg_nnz:
+    reason: "Average non-zeros per doc; the dominant cost factor for sparse dot products."
+    default: 50
+    baseline_value: 50
+    verify: "index.nnz / index.len"
+  splade.model:
+    reason: "Which SPLADE model the sparse vectors represent (v2 vs v3 differ in sparsity)."
+    default: "naver/splade-v2"
+    baseline_value: "naver/splade-v2"
+    verify: "recorded"
+
+  # --- SEISMIC build params (define the index; silent change invalidates compare) ---
+  seismic.n_postings:
+    reason: "Avg postings kept per token. Lower prunes more (faster, lower recall)."
+    default: 3500
+    baseline_value: 4000
+    verify: "build_config.n_postings"
+  seismic.centroid_fraction:
+    reason: "Fraction of docs used to form centroids per list; affects clustering quality."
+    default: 0.1
+    baseline_value: 0.1
+    verify: "build_config.centroid_fraction"
+  seismic.summary_energy:
+    reason: "Energy retained in block summaries; drives pruning accuracy."
+    default: 0.4
+    baseline_value: 0.5
+    verify: "build_config.summary_energy"
+  seismic.min_cluster_size:
+    reason: "Minimum docs per cluster; interacts with block skipping."
+    default: 2
+    baseline_value: 2
+    verify: "build_config.min_cluster_size"
+
+  # --- search params (query-time speed/quality knobs) ---
+  seismic.query_cut:
+    reason: "Max query terms considered. Fewer terms = faster but can drop recall."
+    default: 10
+    baseline_value: 10
+    verify: "recorded"
+  seismic.heap_factor:
+    reason: "Block-skipping aggressiveness. Lower = more skipping = faster, lower recall."
+    default: 0.7
+    baseline_value: 0.9
+    verify: "recorded"
+  seismic.k:
+    reason: "Top-k; defines the recall@k target and search work."
+    default: 10
+    baseline_value: 10
+    verify: "recorded"
+  seismic.warmup:
+    reason: "Untimed warm-up queries before measurement; clamping it changes the measured window (controlled)."
+    default: 50
+    baseline_value: 50
+    verify: "recorded"
+
+# --- Domain gotchas (see plugin/lessons.md) ---
+# * Token arrays MUST be numpy dtype='U30' via seismic.get_seismic_string();
+#   any other dtype raises an opaque "PyArray" conversion error.
+# * pyseismic-lsr needs Rust >= 1.99 (vectorium uses `float_algebraic`).
+# * PyPI `seismic` is an unrelated seismology package — install `pyseismic-lsr`.

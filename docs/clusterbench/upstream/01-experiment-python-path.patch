@@ -1,0 +1,136 @@
+From 3ebcff242cbf7d8d707a464553cd4e80fc1f3f4d Mon Sep 17 00:00:00 2001
+From: ClusterBench <noreply@anthropic.com>
+Date: Fri, 16 Oct 2026 07:27:54 +0000
+Subject: [PATCH] feat(experiment): add python_path to make modules importable
+ in task workers
+
+Task workers reconstruct the task module by file path and do not inherit the
+launching interpreter's sys.path. A Task.execute() that imports a module by name
+at run time (plugin registries, factories, sibling packages) therefore fails
+with ModuleNotFoundError when driving experiments programmatically via
+experiment(), which exposed no way to add worker import paths (project_paths is
+only used for git info).
+
+Add an optional `python_path` argument to experiment(); its entries are resolved
+and appended to workspace.python_path, which the script builder already injects
+into the worker's sys.path. Equivalent to exporting PYTHONPATH before submitting,
+but discoverable from the API.
+
+Adds a regression test (plus a strict-xfail control proving the fix is
+load-bearing).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+---
+ src/experimaestro/scheduler/experiment.py   | 16 ++++++
+ src/experimaestro/tests/test_python_path.py | 58 +++++++++++++++++++++
+ 2 files changed, 74 insertions(+)
+ create mode 100644 src/experimaestro/tests/test_python_path.py
+
+diff --git a/src/experimaestro/scheduler/experiment.py b/src/experimaestro/scheduler/experiment.py
+index 38ce0c1..621f8ba 100644
+--- a/src/experimaestro/scheduler/experiment.py
++++ b/src/experimaestro/scheduler/experiment.py
+@@ -160,6 +160,7 @@ class experiment(BaseExperiment):
+         launcher=None,
+         register_signals: bool = True,
+         project_paths: Optional[list[Path]] = None,
++        python_path: Optional[list[Union[Path, str]]] = None,
+         wait_for_quit: bool = False,
+         dirty_git: DirtyGitAction = DirtyGitAction.WARN,
+         no_db: bool = False,
+@@ -187,6 +188,13 @@ class experiment(BaseExperiment):
+         :param project_paths: Paths to the project files (for git info). If not
+             provided, will be inferred from the caller's location.
+ 
++        :param python_path: Extra import paths prepended to ``sys.path`` of task
++            workers. Task workers reconstruct the task module by file path and do
++            NOT inherit the launching interpreter's ``sys.path``; pass the roots
++            of any packages your tasks import *by name* at run time (plugins,
++            factories, sibling packages) here. Equivalent to exporting
++            ``PYTHONPATH`` before submitting.
++
+         :param wait_for_quit: Deprecated, no longer used. Web server is no longer
+             started automatically.
+ 
+@@ -248,6 +256,14 @@ class experiment(BaseExperiment):
+         run_mode = run_mode or RunMode.NORMAL
+         self.workspace = Workspace(settings, env, launcher=launcher, run_mode=run_mode)
+ 
++        # Import paths made available to task workers (prepended to their
++        # sys.path by the script builder). Workers load the task module by file
++        # path and otherwise do not see the launcher's sys.path.
++        if python_path:
++            self.workspace.python_path.extend(
++                str(Path(p).resolve()) for p in python_path
++            )
++
+         # Store experiment name for ID references
+         self.name = name
+ 
+diff --git a/src/experimaestro/tests/test_python_path.py b/src/experimaestro/tests/test_python_path.py
+new file mode 100644
+index 0000000..5680466
+--- /dev/null
++++ b/src/experimaestro/tests/test_python_path.py
+@@ -0,0 +1,58 @@
++"""Regression test for ``experiment(python_path=...)``.
++
++Task workers reconstruct the task module by file path and do not inherit the
++launching interpreter's ``sys.path``. A task that imports a module *by name* at
++run time therefore fails unless that module's root is made available to the
++worker. ``experiment(python_path=[...])`` is the programmatic way to do so.
++"""
++
++import importlib
++import sys
++
++import pytest
++
++from experimaestro import Param, Task, experiment
++from experimaestro.scheduler import JobState
++
++_PROBE_PKG = "xpm_python_path_probe"
++
++
++class DynamicImportProbe(Task):
++    """Imports ``module`` by name inside the worker (needs worker sys.path)."""
++
++    module: Param[str]
++
++    def execute(self):
++        from pathlib import Path
++
++        mod = importlib.import_module(self.module)
++        Path("probe.txt").write_text(mod.VALUE)
++
++
++def _write_probe_package(root):
++    pkg = root / _PROBE_PKG
++    pkg.mkdir(parents=True)
++    (pkg / "__init__.py").write_text("VALUE = 'imported-via-python-path'\n")
++    return root
++
++
++def test_python_path_makes_module_importable_in_worker(tmp_path):
++    pkgroot = _write_probe_package(tmp_path / "pkgs")
++    # The probe package must not be importable in the parent either.
++    assert _PROBE_PKG not in sys.modules
++
++    with experiment(tmp_path / "xp", "python_path_test",
++                    no_environmental_impact=True, python_path=[pkgroot]):
++        job = DynamicImportProbe.C(module=_PROBE_PKG).submit()
++        assert job.__xpm__.job.wait() == JobState.DONE
++
++
++@pytest.mark.xfail(reason="without python_path the worker cannot import the module", strict=True)
++def test_without_python_path_the_worker_cannot_import(tmp_path):
++    pkgroot = _write_probe_package(tmp_path / "pkgs")
++    sys.path_importer_cache.clear()
++
++    with experiment(tmp_path / "xp", "python_path_control",
++                    no_environmental_impact=True):
++        job = DynamicImportProbe.C(module=_PROBE_PKG).submit()
++        assert job.__xpm__.job.wait() == JobState.DONE
+-- 
+2.43.0
+
