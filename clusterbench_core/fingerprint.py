@@ -37,7 +37,7 @@ def _lib_versions() -> dict:
     for name in ("seismic", "opensearchpy"):
         try:
             mod = __import__(name)
-            libs[name] = getattr(mod, "__version__", "present")
+            libs[name] = str(getattr(mod, "__version__", "present"))  # str → JSON-stable
         except Exception:  # noqa: BLE001
             libs[name] = "absent"
     return libs

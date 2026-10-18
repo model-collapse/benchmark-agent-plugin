@@ -10,6 +10,7 @@ failure short-circuits to an ABORTED_* status but STILL persists a RunResult
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,11 +123,19 @@ def run_lifecycle(
         desc = domain.prep_descriptor(art) if hasattr(domain, "prep_descriptor") else {}
         if cacheable:
             domain.save_prep(art, prep_wd)   # into the step workdir → scheduler caches it
+            # Gate 2: stamp the build environment so a cross-fingerprint reuse is refused.
+            from clusterbench_core.fingerprint import env_fingerprint
+            (prep_wd / "_fingerprint.json").write_text(json.dumps(env_fingerprint()))
         return {"outputs": {"artifact": art, "descriptor": desc}}
 
     def _measure_fn(idx):
         art = idx.get("artifact")
         if art is None:                       # cache hit → load the persisted artifact
+            fp_file = Path(idx["cache_dir"]) / "_fingerprint.json"
+            if fp_file.exists():
+                from clusterbench_core.fingerprint import (
+                    assert_comparable_fingerprint, env_fingerprint)
+                assert_comparable_fingerprint(json.loads(fp_file.read_text()), env_fingerprint())
             art = domain.load_prep(idx["cache_dir"])
         out = domain.measure(cfg, art, recorder)
         return {"metrics": out.metrics, "phases": out.phases,

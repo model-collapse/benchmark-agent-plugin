@@ -45,3 +45,14 @@ def test_stale_cached_artifact_fails_loud(tmp_path):
     art.write_text(json.dumps({"n": 999999}))
     lr = run_lifecycle(_cfg(0.9), DemoDomain(), workdir=tmp_path)  # same build_key -> hit -> load
     assert lr.result.status is RunStatus.FAILED  # StaleArtifact surfaced loudly, not silent
+
+
+def test_cross_fingerprint_prep_reuse_refused(tmp_path):
+    import json
+    from pathlib import Path
+    demo.BUILD_COUNT = 0
+    run_lifecycle(_cfg(0.5), DemoDomain(), workdir=tmp_path)  # builds + stamps fingerprint
+    fp = next(Path(tmp_path / "_cache").rglob("_fingerprint.json"))
+    data = json.loads(fp.read_text()); data["code_version"] = "different-sha"; fp.write_text(json.dumps(data))
+    lr = run_lifecycle(_cfg(0.9), DemoDomain(), workdir=tmp_path)  # cache hit, different env
+    assert lr.result.status is RunStatus.FAILED  # cross-fingerprint reuse refused, loud
