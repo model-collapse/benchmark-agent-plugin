@@ -26,6 +26,7 @@ from clusterbench_core.discipline.reliability import (
 from clusterbench_core.guard import OOMGuard, GuardAction
 from clusterbench_core.model import (
     BenchmarkConfig,
+    PhaseMetrics,
     ReliabilityTag,
     RunResult,
     RunStatus,
@@ -62,6 +63,7 @@ def run_lifecycle(
     apply: bool = True,
     prior: RunResult | None = None,
     launcher=None,
+    measure_in_subprocess: bool = False,
 ) -> LifecycleResult:
     run_id = cfg.run_id()
     sig = cfg.signature()
@@ -113,24 +115,32 @@ def run_lifecycle(
     from clusterbench_core.engine.scheduler import Scheduler
     from clusterbench_core.engine.step import Step, StepRef
 
+    from clusterbench_core.engine.launcher import LocalProcessLauncher
+
     cacheable = all(hasattr(domain, m) for m in ("build_key", "save_prep", "load_prep"))
     cache = SignatureCache(Path(workdir) / "_cache") if cacheable else None
     prep_wd = run_dir / "steps" / "prep"
     recorder = EffectiveRecorder()   # Gate 1: capture effective params at point of use
+    # Issue #3: opt-in subprocess measurement → per-trial attributable RSS. Needs a
+    # cacheable domain with a no-arg import path (so the subprocess can reconstruct it
+    # and load the prep from disk). Default off → in-process (unchanged, fast).
+    subprocess_measure = measure_in_subprocess and cacheable and hasattr(domain, "measure_import")
 
     def _prep_fn():
         art = domain.prep(cfg, recorder)
         desc = domain.prep_descriptor(art) if hasattr(domain, "prep_descriptor") else {}
         if cacheable:
             domain.save_prep(art, prep_wd)   # into the step workdir → scheduler caches it
-            # Gate 2: stamp the build environment so a cross-fingerprint reuse is refused.
             from clusterbench_core.fingerprint import env_fingerprint
             (prep_wd / "_fingerprint.json").write_text(json.dumps(env_fingerprint()))
-        return {"outputs": {"artifact": art, "descriptor": desc}}
+        out = {"descriptor": desc}
+        if not subprocess_measure:           # in-process keeps the live artifact in-memory
+            out["artifact"] = art
+        return {"outputs": out}
 
     def _measure_fn(idx):
         art = idx.get("artifact")
-        if art is None:                       # cache hit → load the persisted artifact
+        if art is None:                       # cache hit (or subprocess) → load from disk
             fp_file = Path(idx["cache_dir"]) / "_fingerprint.json"
             if fp_file.exists():
                 from clusterbench_core.fingerprint import (
@@ -144,9 +154,18 @@ def run_lifecycle(
     prep_step = Step(name="prep", fn=_prep_fn, inputs={},
                      cache_key=tuple(domain.build_key(cfg)) if cacheable else None,
                      cacheable=cacheable)
-    measure_step = Step(name="measure", fn=_measure_fn, inputs={"idx": StepRef("prep")},
-                        cacheable=False)
-    step_results = Scheduler(launcher or InProcessLauncher(), cache=cache).run(
+    if subprocess_measure:
+        measure_step = Step(name="measure", fn="clusterbench_core.engine.measure_entry:run_measure",
+                            inputs={"config_json": json.dumps(cfg.to_dict()),
+                                    "domain_import": domain.measure_import,
+                                    "idx": StepRef("prep")}, cacheable=False)
+        measure_launcher = LocalProcessLauncher(budget=cfg.resource_budget)
+    else:
+        measure_step = Step(name="measure", fn=_measure_fn, inputs={"idx": StepRef("prep")},
+                            cacheable=False)
+        measure_launcher = None
+    step_results = Scheduler(launcher or InProcessLauncher(), cache=cache,
+                             measure_launcher=measure_launcher).run(
         [prep_step, measure_step], run_dir / "steps"
     )
     pr, mr = step_results["prep"], step_results["measure"]
@@ -155,7 +174,9 @@ def run_lifecycle(
         lr.preflight = pf
         return lr
 
-    metrics, phases = mr.metrics, mr.phases
+    metrics = mr.metrics
+    phases = [p if isinstance(p, PhaseMetrics) else PhaseMetrics.from_dict(p) for p in mr.phases]
+    effective_params = dict(mr.effective_params) if subprocess_measure else dict(recorder.params)
     fv = mr.outputs.get("functional_validation", {})
     peak = int(metrics.get("peak_rss_kb", 0))
     if cfg.resource_budget and peak:
@@ -176,7 +197,7 @@ def run_lifecycle(
         run_id=run_id, signature=sig, status=RunStatus.COMPLETED,
         reliability_tag=ReliabilityTag.QUALIFIED, metrics=metrics,
         phases=phases, functional_validation=fv,
-        effective_params=dict(recorder.params),
+        effective_params=dict(effective_params),
     )
     notes: list[str] = []
 
@@ -184,8 +205,8 @@ def run_lifecycle(
     from clusterbench_core.engine.signature import field_diff, signature as _sig
     # Only gate params the config actually declares; a captured value whose name
     # is not a declared config param is not an identity param to compare against.
-    declared_subset = {n: cfg.get(n) for n in recorder.params if n in cfg.params}
-    captured_subset = {n: v for n, v in recorder.params.items() if n in cfg.params}
+    declared_subset = {n: cfg.get(n) for n in effective_params if n in cfg.params}
+    captured_subset = {n: v for n, v in effective_params.items() if n in cfg.params}
     diff = field_diff(declared_subset, captured_subset)
     result.effective_signature = _sig(captured_subset)
     result.signature_diff = {k: {"declared": a, "effective": b} for k, (a, b) in diff.items()}
@@ -212,7 +233,7 @@ def run_lifecycle(
     # RSS is per-trial attributable only when measured in a fresh subprocess;
     # in-process peak_rss (ru_maxrss) is a process high-water mark contaminated by
     # prep and prior trials — flag it so the tuner never selects on it.
-    result.measurement_flags = {"memory_comparable": type(launcher).__name__ == "LocalProcessLauncher"}
+    result.measurement_flags = {"memory_comparable": subprocess_measure}
     from clusterbench_core.discipline.reliability import fairness_assert
     fairness_assert(result)  # fail-loud: effective!=declared can never be RELIABLE/QUALIFIED
     cfg.assert_unchanged()   # Gate 1: config must not have mutated during the run

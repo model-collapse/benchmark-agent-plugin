@@ -22,6 +22,7 @@ BUILD_COUNT = 0
 
 class DemoDomain:
     name = "demo"
+    measure_import = "clusterbench_domains.demo:DemoDomain"  # no-arg → subprocess-measurable
 
     def required_params(self) -> dict:
         return {}

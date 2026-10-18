@@ -32,6 +32,7 @@ def _pct(latencies_ms, p):
 
 class SeismicDomain:
     name = "seismic"
+    measure_import = "clusterbench_domains.seismic:SeismicDomain"  # no-arg → subprocess-measurable
 
     def __init__(self):
         self._build_cache: dict[tuple, dict] = {}

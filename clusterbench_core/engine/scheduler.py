@@ -31,10 +31,14 @@ def _step_sig(step: Step) -> str:
 
 
 class Scheduler:
-    def __init__(self, launcher, cache: SignatureCache | None = None, max_parallel: int = 4):
+    def __init__(self, launcher, cache: SignatureCache | None = None, max_parallel: int = 4,
+                 measure_launcher=None):
         self.launcher = launcher
         self.cache = cache
         self.max_parallel = max_parallel
+        # optional launcher for non-cacheable (measurement) steps — e.g. a subprocess
+        # launcher so RSS is per-trial attributable
+        self.measure_launcher = measure_launcher
 
     def run(self, steps: list[Step], workroot: str | Path) -> dict[str, StepResult]:
         workroot = Path(workroot)
@@ -86,7 +90,8 @@ class Scheduler:
                     outputs={"cache_dir": str(self.cache.path_for(step.name, sig)), "cached": True},
                 )
 
-        r = self.launcher.run(step, inputs, wd)
+        launcher = self.measure_launcher if (not step.cacheable and self.measure_launcher) else self.launcher
+        r = launcher.run(step, inputs, wd)
 
         if step.cacheable and self.cache is not None and r.status == "COMPLETED":
             sig = _step_sig(step)
