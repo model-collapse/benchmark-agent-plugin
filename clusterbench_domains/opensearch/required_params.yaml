@@ -1,0 +1,75 @@
+# Required-parameters manifest: OpenSearch SPLADE (rank_features) benchmarks
+#
+# Ported in spirit from the model-collapse plugin's opensearch_forcemerge
+# manifest. Each parameter must be declared explicitly; a silent change makes a
+# speed comparison uninterpretable.
+
+schema_version: "1.0"
+domain: "opensearch"
+
+required_params:
+
+  # --- corpus / encoding ---
+  corpus.n_docs:
+    reason: "Corpus size drives ingest time, segment count, and search cost."
+    default: 20000
+    baseline_value: 20000
+    verify: "GET /<index>/_count"
+  splade.model:
+    reason: "Which SPLADE model the sparse vectors represent (v2 vs v3)."
+    default: "naver/splade-v3"
+    baseline_value: "naver/splade-v3"
+    verify: "recorded"
+
+  # --- index settings (define the index; Final ones must be set at creation) ---
+  index.number_of_shards:
+    reason: "Shard count changes search parallelism and per-query overhead. Final."
+    default: 1
+    baseline_value: 1
+    verify: "GET /<index>/_settings .index.number_of_shards"
+  index.number_of_replicas:
+    reason: "Replicas; 0 on single node to reach green and avoid double work."
+    default: 0
+    baseline_value: 0
+    verify: "GET /<index>/_settings .index.number_of_replicas"
+  index.refresh_interval:
+    reason: "Refresh frequency during ingest; 1s fragments segments badly."
+    default: "-1"
+    baseline_value: "-1"
+    verify: "GET /<index>/_settings .index.refresh_interval"
+  index.codec:
+    reason: "Stored-field codec; affects index size and merge cost."
+    default: "default"
+    baseline_value: "default"
+    verify: "GET /<index>/_settings .index.codec"
+
+  # --- merge / force-merge ---
+  forcemerge.max_num_segments:
+    reason: "Target segment count for force-merge. 1 segment is fastest to search."
+    default: 1
+    baseline_value: 1
+    verify: "GET /<index>/_segments (count)"
+
+  # --- query-time speed knob (the treatment) ---
+  query.prune_terms:
+    reason: "Max query terms (by weight) kept. Fewer rank_feature clauses = faster query, lower recall."
+    default: 64
+    baseline_value: 64
+    verify: "recorded"
+  query.k:
+    reason: "Top-k; defines recall@k target and search size."
+    default: 10
+    baseline_value: 10
+    verify: "recorded"
+  query.warmup:
+    reason: "Untimed warm-up queries before measurement; a controlled measurement-window knob."
+    default: 50
+    baseline_value: 50
+    verify: "recorded"
+
+# --- Domain gotchas (see plugin/lessons.md) ---
+# * opensearch-py calls require keyword args (index=...), not positional.
+# * number_of_replicas=0 on a single node to reach green.
+# * Searching fewer segments is faster at equal recall (force-merge, L2);
+#   always run a warm-up pass before timing (L1); tear down the container in
+#   a finally block (L4).

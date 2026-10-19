@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clusterbench"
+version = "0.1.0"
+description = "Cluster-ops benchmarking framework with a native Apache-2.0 execution engine and the model-collapse discipline layer."
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+opensearch = ["opensearch-py>=2.4"]
+seismic = ["pyseismic-lsr", "numpy"]
+splade = ["torch", "transformers"]
+dev = ["pytest>=7", "pytest-timeout"]
+
+[tool.setuptools.packages.find]
+include = ["clusterbench_core*", "clusterbench_ops*", "clusterbench_domains*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "happy: opt-in end-to-end happy-path smoke tests (need Docker/SEISMIC)",
+    "engine: native engine integration tests (spawn worker subprocess)",
+]
+addopts = "-ra"
