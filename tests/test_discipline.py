@@ -149,9 +149,10 @@ def test_recall_uses_absolute_tolerance():
                   metrics={}, functional_validation={"recall@10": 0.98})
     b = RunResult("b", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED,
                   metrics={}, functional_validation={"recall@10": 0.978})  # -0.2pp within 0.5pp
-    assert reliability.reproduced_within_tolerance(a, b).reproduced
+    tol = {"recall@10": {"tol": 0.005, "absolute": True}}  # recall declared by the domain, not core
+    assert reliability.reproduced_within_tolerance(a, b, tol).reproduced
     b.functional_validation["recall@10"] = 0.95  # -3pp out
-    assert not reliability.reproduced_within_tolerance(a, b).reproduced
+    assert not reliability.reproduced_within_tolerance(a, b, tol).reproduced
 
 
 def test_citation_rules():

@@ -59,6 +59,8 @@ def build_base_config(n_docs=50_000, n_queries=500, vocab=30_000, avg_nnz=50,
     ]
     # 246 GB box; SEISMIC is in-memory and small here.
     cfg.resource_budget = ResourceBudget(total_ram_kb=240 * 1024 * 1024, estimated_peak_kb=8 * 1024 * 1024)
+    cfg.reproduction_tolerances = {"recall@10": {"tol": 0.005, "absolute": True},
+                                   "build_time_s": 0.30, "search_time_s": 0.20}
     return cfg
 
 

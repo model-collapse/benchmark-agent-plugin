@@ -37,3 +37,19 @@ def test_lifecycle_uses_config_tolerances(tmp_path):
     second = run_lifecycle(cfg2, NDCGDomain(0.40), workdir=tmp_path,  # 20% worse ndcg
                            baseline=make_base_config(0.7), prior=first.result)
     assert "NOT reproduced" in " ".join(second.result.notes)
+
+
+def test_absolute_tolerance_dict_form():
+    a = RunResult("a", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED, metrics={"accuracy": 0.90})
+    b = RunResult("b", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED, metrics={"accuracy": 0.905})
+    tol = {"accuracy": {"tol": 0.01, "absolute": True}}
+    assert reproduced_within_tolerance(a, b, tol).reproduced            # +0.005 within 0.01
+    b.metrics["accuracy"] = 0.95
+    assert not reproduced_within_tolerance(a, b, tol).reproduced        # +0.05 out
+
+
+def test_absolute_works_near_zero_where_relative_fails():
+    a = RunResult("a", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED, metrics={"delta": 0.0})
+    b = RunResult("b", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED, metrics={"delta": 0.0005})
+    assert reproduced_within_tolerance(a, b, {"delta": {"tol": 0.001, "absolute": True}}).reproduced
+    assert not reproduced_within_tolerance(a, b, {"delta": 0.001}).reproduced  # relative: /~0 → fails

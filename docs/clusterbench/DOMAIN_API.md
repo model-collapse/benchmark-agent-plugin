@@ -57,7 +57,7 @@ run is auto-tagged UNRELIABLE.
 | `required_params()` → `load_manifest(path)` | the **manifest HARD gate** — every listed param must be declared |
 | `build_key(cfg)` + `save_prep(artifact, path)` + `load_prep(path)` + `prep_descriptor(artifact)` | **cross-session prep caching** keyed by build params (built once, reused); add `load_prep` verification for a `StaleArtifact` guard |
 | `measure_import = "pkg.mod:MyDomain"` (no-arg) and/or `reconstruct(cache_dir)` | **subprocess measurement** → per-trial attributable RSS (`memory_comparable=True`) |
-| config `reproduction_tolerances = {"ndcg@10": 0.01, ...}` | your custom metric is **reproduction-gated** (RELIABLE requires it to reproduce) |
+| config `reproduction_tolerances = {"ndcg@10": 0.01, "accuracy": {"tol": 0.01, "absolute": True}}` | your custom metric is **reproduction-gated** (RELIABLE requires it to reproduce). A float is a **relative** tolerance; `{"tol": x, "absolute": True}` is **absolute** — use absolute for metrics near zero or bounded in [0,1] (accuracy, recall) where relative is meaningless. The core defaults cover only generic `p50_ms`/`p95_ms`/`peak_rss_kb`; declare your own metrics here. |
 | config `resource_budget = ResourceBudget(total_ram_kb=...)` | the OOM guard (SIGTERM→SIGKILL at the ceiling) |
 | `controlled_variables` + a real `verify_config` | Phase C catches the live system drifting from the declared config |
 
