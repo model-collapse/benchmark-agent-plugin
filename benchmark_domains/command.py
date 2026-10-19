@@ -144,6 +144,11 @@ class CommandDomain:
         steps = [self._to_step(s, params, upstream_artifacts, local_names) for s in stages]
         subdir = "prep" if stages[0].get("kind", "prep") == "prep" else "measure"
         results = Scheduler(InProcessLauncher(), cache=self._cache).run(steps, self.workroot / subdir)
+        # fail loud: a stage that crashed or produced unparseable metrics must abort
+        # the run (not be silently dropped into an empty-metrics "success").
+        for sname, r in results.items():
+            if r.status != "COMPLETED":
+                raise RuntimeError(f"command stage {sname!r} did not complete: {r.error}")
         self._capture_effective(stages, subdir, ctx, results)
         return results
 
@@ -194,6 +199,25 @@ class CommandDomain:
             return run_command_stage(cmd, params, arts, workdir=str(wd),
                                      produces=produces, metrics_from=metrics_from)
 
-        cache_key = (name, cmd, tuple(sorted(referenced.items())), tuple(sorted(needs))) if cacheable else None
+        cache_key = self._prep_key(name, params, {}) if cacheable else None
         return Step(name=name, fn=fn, inputs=inputs, cache_key=cache_key,
                     cacheable=cacheable, parallel_safe=parallel_safe)
+
+    def _prep_key(self, name: str, params: dict, memo: dict) -> tuple:
+        """Content identity of a prep stage, INCLUDING its upstream prep stages'
+        identities (recursively). Without the upstream keys a downstream stage
+        whose own cmd/params/needs are unchanged would be a false cache HIT when an
+        upstream artifact's content changed (e.g. a param only the upstream cmd
+        references) — serving a stale artifact across a tuning sweep."""
+        if name in memo:
+            return memo[name]
+        stage = self._stages[name]
+        cmd = stage["cmd"]
+        referenced = tuple(sorted((p, v) for p, v in params.items() if ("{" + p + "}") in cmd))
+        upstream = tuple(
+            self._prep_key(dep, params, memo)
+            for dep in sorted(stage.get("needs", []))
+            if dep in self._stages and self._stages[dep].get("kind", "prep") == "prep")
+        key = (name, cmd, referenced, upstream)
+        memo[name] = key
+        return key

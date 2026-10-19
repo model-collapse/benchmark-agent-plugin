@@ -69,8 +69,11 @@ def load_runs(workdir: str | Path) -> list[dict]:
         row.update(r.get("metrics", {}))
         fv = r.get("functional_validation", {})
         row["passed"] = fv.get("passed")
-        if "recall@10" in fv:
-            row["recall@10"] = fv["recall@10"]
+        # metric-agnostic: flatten every functional-validation value (recall@10,
+        # ndcg@10, accuracy, …), not a hard-coded metric name.
+        for k, v in fv.items():
+            if k != "passed":
+                row[k] = v
         cfg_p = rp.parent / "config.yaml"
         if cfg_p.exists():
             tv = (yaml.safe_load(cfg_p.read_text()) or {}).get("treatment_variable", {})
