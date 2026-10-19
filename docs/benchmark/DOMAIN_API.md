@@ -1,6 +1,6 @@
-# Bring Your Own Experiment: the `Domain` API
+# Bring Your Own Experiment: CommandDomain + the `Domain` API
 
-ClusterBench is an **experiment harness**. You wrap *your* system (a retriever, a
+This is an **experiment harness**. You wrap *your* system (a retriever, a
 reranker, a vector DB, any benchmarkable thing) in a `Domain`; the harness gives
 you — for free — fair comparison, a required-params gate, preflight, an OOM guard,
 the two fairness gates (frozen config + effective-param integrity), replication,
@@ -8,7 +8,50 @@ reproduction, provenance/fingerprint, the tuner, cross-session caching, the loop
 guard, and honest persisted reports. The harness is **metric-agnostic**: you name
 your own primary/quality metrics and emit whatever metrics you like.
 
-## Minimal Domain (5 methods — everything else is optional)
+## Route A — CommandDomain (no Python)
+
+Declare a DAG of shell **stages** in YAML; the generic `CommandDomain` runs them on
+the full backbone. Benchmark anything that has a build step and a measurable step.
+
+```yaml
+domain: command
+recipe: retrieval-index          # optional: pre-fills stages + a required-params manifest
+stages:
+  - name: build                  # kind: prep → signature-cached, reused across trials
+    kind: prep
+    cmd: "./build_index.sh --docs {corpus.n_docs} --out {index}"
+    produces: [index]
+  - name: search                 # kind: measure → always re-run
+    kind: measure
+    needs: [build]
+    cmd: "./search_bench.sh --index {index} --queries {n_queries}"
+    metrics_from: {stdout: true, fields: [p50_ms, "recall@10"]}   # or {file: "out.json", fields: [...]}
+    effective_from: {file: "resolved.json"}   # point-of-use capture (Gate 1)
+treatment_variable: forcemerge.max_num_segments
+required_params:                 # HARD gate — must be declared, even at default
+  corpus.n_docs: {baseline_value: 20000, reason: "corpus scale affects comparability"}
+```
+
+```python
+import yaml
+from benchmark_domains.command import CommandDomain
+from benchmark_domains.recipes.loader import load_recipe
+
+spec = load_recipe("retrieval-index", overrides=yaml.safe_load(open("my.yaml")))
+domain = CommandDomain(spec, workroot="./benchmark_data/_cmd")   # stable workroot ⇒ cross-session cache
+```
+
+Semantics: `{name}` tokens are substituted from params + upstream artifacts
+(shell-quoted — literal braces like JSON on stdout survive); `produces` names flow
+to downstream `needs`; a stage's cmd text is part of its cache key (change the cmd ⇒
+cache miss); `metrics_from` reads stdout JSON or a JSON/CSV file; a measure stage
+that records no performance metric may set `parallel: true` to overlap siblings. The
+DAG is validated in preflight (no cycles, resolvable `needs`, known placeholders).
+
+Graduate to a Python `Domain` (below) when a stage needs real logic rather than a
+shell command.
+
+## Route B — Minimal Python Domain (5 methods — everything else is optional)
 
 ```python
 from benchmark_engine.domain import MeasureOutcome, PrepArtifact

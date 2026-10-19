@@ -1,6 +1,10 @@
 # Benchmark Agent Plugin for Claude Code
 
-An autonomous benchmark agent that plans, executes, monitors, and analyzes performance experiments on distributed systems. Produces reproducible results with honest, evidence-backed conclusions.
+One general-purpose **experiment harness** for Claude Code. A single `/benchmark`
+skill plans, runs, tunes, analyzes, compares, and tracks performance experiments on
+*any* system — a database, index, retriever, or an embedding/LLM training+eval
+pipeline — backed by a native, self-contained engine (Apache-2.0, no external
+workflow engine). Reproducible results with honest, evidence-backed conclusions.
 
 ## Install
 
@@ -12,131 +16,91 @@ An autonomous benchmark agent that plans, executes, monitors, and analyzes perfo
 /plugin install benchmark-agent@benchmark-tools
 ```
 
-Or install directly from repo:
-```bash
-/plugin marketplace add model-collapse/benchmark-agent-plugin
+## One skill, verb-dispatched
+
+`/benchmark <verb>` — the skill is a thin judgment layer; every gate, cache, budget,
+and fairness check is enforced by the engine it calls (never re-implemented in prose).
+
+| Verb | What it does |
+|------|--------------|
+| `plan <domain\|recipe> <hypothesis>` | Frame hypothesis/treatment/controls, challenge misaligned requests, produce a validated `BenchmarkConfig` (manifest hard-gate + preflight run here). No execution. |
+| `run [--detach]` | Execute via the engine; `--detach` nohups a long/cluster run that survives session death and monitors via `/loop`. |
+| `tune` | Hyperparameter search (grid/refine/coordinate) with a **loop guard** that never selects a non-comparable trial. |
+| `analyze <run_id>` | Skeptical interpretation + mandatory "What Went Wrong"; reads the engine-computed reliability tag and fairness verdict. |
+| `compare <a> <b>` | Frame the finding; the engine's comparability gates refuse unfair comparisons. |
+| `history` / `status` / `reclassify` | One results index as the single source of truth. |
+| `domain [--recipe <r>]` | Scaffold a new benchmark target: a CommandDomain stages config or a Python `Domain`. |
+
+## Benchmark anything — the generic CommandDomain
+
+You don't need Python to benchmark a system. Declare a DAG of shell **stages** in
+YAML and the engine supplies fair comparison, signature caching, preflight, OOM
+guardrails, and the tuner:
+
+```yaml
+domain: command
+recipe: retrieval-index          # optional pre-filled template + fairness manifest
+stages:
+  - name: build                  # kind: prep → cached by signature, reused across trials
+    kind: prep
+    cmd: "./build_index.sh --docs {corpus.n_docs} --out {index}"
+    produces: [index]
+  - name: search                 # kind: measure → always re-run; metrics parsed from stdout/file
+    kind: measure
+    needs: [build]
+    cmd: "./search_bench.sh --index {index} --queries {n_queries}"
+    metrics_from: {stdout: true, fields: [p50_ms, "recall@10"]}
+treatment_variable: forcemerge.max_num_segments
 ```
 
-## Skills Included
+The same abstraction covers retrieval (`build→search`), embedding (`train→eval`), and
+LLM (`data_prep→train→eval`) pipelines. Recipes ship pre-filled stages plus a
+scenario-tuned required-params manifest. For richer logic, hand-write a Python
+`Domain` (OpenSearch and SEISMIC ship as typed reference domains). See
+**[`docs/benchmark/README.md`](docs/benchmark/README.md)** and
+**[`docs/benchmark/DOMAIN_API.md`](docs/benchmark/DOMAIN_API.md)**.
 
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| **benchmark_agent** | `/benchmark_agent` | Brain — plans, validates, generates scripts, analyzes results, manages history |
-| **benchmark_run** | `/benchmark_run` | Muscle — launches nohup scripts, monitors via `/loop`, detects completion |
-| **clusterbench_plan** | `/clusterbench_plan` | Plan a ClusterBench experiment — fair comparison, manifest gate, tuning search; produces a validated config + script |
-| **clusterbench_run** | `/clusterbench_run` | Execute an approved ClusterBench plan via the native engine; manages cluster lifecycle, persists results |
-| **clusterbench_domain** | `/clusterbench_domain` | Author a new ClusterBench domain (a system to benchmark) against the `Domain` protocol |
-
-## How It Works
-
-```
-You: "benchmark force merge with the new eviction fix"
-  → /benchmark_agent activates automatically
-  → Loads prior run history and lessons
-  → Challenges if request is misaligned with context
-  → Produces run plan with comparison matrix
-  → Generates execution/monitor/check scripts
-  → You approve
-
-You: "run it"
-  → /benchmark_run launches nohup scripts
-  → Starts /loop for periodic check-in
-  → You can close your session
-
-[Hours later, benchmark completes]
-  → Loop detects completion signal
-  → Triggers /benchmark_agent analyze
-  → Skeptical analysis protocol runs
-  → Report produced with mandatory "What Went Wrong" section
-  → Results index updated with reliability tag
-```
-
-## Core Principles
+## Core principles (enforced by the engine)
 
 | Principle | Meaning |
 |-----------|---------|
-| **Fair Comparison** | Only the treatment variable changes between runs |
-| **Memory Continuity** | Every run inherits full context of prior runs |
-| **Safety First** | Validate hardware capacity before execution |
-| **Skeptical Analysis** | Good results get more scrutiny, not less |
-| **Honest Reporting** | All findings reported — especially inconvenient ones |
-| **Root Cause Depth** | No guessing. Trace causation, not correlation |
+| **Fair Comparison** | Only the treatment variable changes; the manifest hard-gates the rest |
+| **Memory Continuity** | Every run inherits prior context (results index + lessons) |
+| **Safety First** | Resource budget + OOM guard validated before and during execution |
+| **Skeptical Analysis** | Good results get more scrutiny; reproduction required for RELIABLE |
+| **Honest Reporting** | Every report carries a mandatory "What Went Wrong" section |
+| **Root Cause Depth** | Two fairness gates refuse non-comparable or noise-level "wins" |
 
-## Key Features
+## Key features
 
-- **Challenge Protocol** — Agent pushes back on misaligned requests before wasting hours on confounded runs
-- **Reliability Tags** — Every run classified as RELIABLE / QUALIFIED / UNRELIABLE / EXPLORATORY
-- **Session Resilience** — Benchmark scripts survive session death via nohup; reconnect with `/benchmark_run resume`
-- **Skeptical Analysis** — Different protocols for good vs bad results (good results get MORE scrutiny)
-- **Mandatory "What Went Wrong" Section** — Reports without this section are rejected
-- **Physical Artifact Verification** — Catches logical vs physical file format mismatches
-- **Phase Decomposition** — Instruments per-phase to reveal true bottlenecks
-- **Resource Budget** — Computes worst-case before execution to prevent OOM
+- **Two-gate experiment fairness** — parameter-identity (frozen config, point-of-use effective-param capture) + measurement-comparability (replication, effect>noise, env/code fingerprint).
+- **Loop-guarded tuner** — halts (and asks) on an ungrounded baseline or a non-comparable streak; auto-halts on budgets / no progress.
+- **Session resilience** — `run --detach` survives session death via nohup + `/loop`.
+- **Reliability tags** — RELIABLE / QUALIFIED / UNRELIABLE / EXPLORATORY; citations gated.
+- **Cross-session signature cache** — deterministic prep reused; measurement always re-run.
+- **Resource guardrails** — host-RSS OOM guard today; GPU/VRAM guardrails + GPU-hours/$ budgets are the next phase.
 
-## ClusterBench — programmatic experiment harness
+## Data directory
 
-Alongside the autonomous agent above, the plugin ships **ClusterBench**: a
-reproducible, code-backed experiment harness with its own native, self-contained
-execution engine (Apache-2.0, no external workflow engine). Where the agent drives
-nohup shell scripts, ClusterBench runs experiments as Python with a content-addressed
-cache, a hyperparameter **Tuner** (grid / refine / coordinate), and a two-gate
-experiment-fairness system plus a loop guard that stops the search from chasing
-unfair or noise-level "wins". You wrap any system (database, index, service) in a
-`Domain` and the harness stays metric-agnostic; it ships OpenSearch (`rank_features`
-SPLADE) and SEISMIC reference domains.
-
-Use `/clusterbench_plan` → `/clusterbench_run`, and `/clusterbench_domain` to add a
-new system. Full overview, architecture, setup, and the bring-your-own-`Domain`
-guide live in **[`docs/clusterbench/README.md`](docs/clusterbench/README.md)** and
-**[`docs/clusterbench/DOMAIN_API.md`](docs/clusterbench/DOMAIN_API.md)**.
-
-## Data Directory
-
-The plugin uses `$BENCHMARK_HOME` (defaults to `./benchmark_data/` in your project):
+The plugin uses `$BENCHMARK_HOME` (defaults to `./benchmark_data/`):
 
 ```
 benchmark_data/
-  results_index.md          — Single source of truth for all runs
-  lessons.md                — Accumulated lessons (append-only)
-  risks.md                  — Known fragilities and scaling limits
-  runs/
-    run_<date>_<slug>.md    — Individual run records
-  plans/
-    plan_<date>_<slug>.md   — Approved run plans
-  scripts/
-    execute_<id>.sh         — Generated execution scripts
-    monitor_<id>.sh         — Generated resource monitors
-    check_<id>.sh           — Generated status check scripts
-  monitors/
-    <id>_monitor.log        — CSV resource metrics
-    <id>_events.log         — Phase transitions
-    <id>.running            — Active run signal
-    <id>.complete           — Completion signal
-    <id>.failed             — Failure signal
-  settings/
-    <system>_settings.md    — Environment configs
+  results_index.md          — single source of truth for all runs (grouped by reliability tag)
+  lessons.md                — accumulated lessons (append-only, read at plan time)
+  risks.md                  — known fragilities and scaling limits
+  runs/<run_id>/            — per-run config.yaml, results.yaml, report.md
 ```
 
-## Configuration
-
-Set `BENCHMARK_HOME` environment variable to customize the data directory:
-```bash
-export BENCHMARK_HOME=/path/to/your/benchmark_data
-```
-
-Or leave unset — defaults to `./benchmark_data/` relative to your project root.
+Set `BENCHMARK_HOME` to customize; otherwise it defaults relative to your project root.
 
 ## Origin
 
-Built from lessons learned running force-merge/RSS/latency benchmarks on a 138M-doc SEISMIC sparse vector index across 3-node clusters. Every feature exists because its absence caused a real problem:
-
-- Comparison matrix: prevented by segment-count confound that nearly discarded a correct fix
-- Challenge protocol: prevented by a misaligned run that wasted 5+ hours
-- Reliability tags: prevented by citing an invalidated run as baseline
-- Physical artifact verification: prevented by 20 GB blind spot from compound file formats
-- Skeptical analysis: prevented by celebrating results that hid 6 bugs
-
-See `BENCHMARK_LESSONS_LEARNED.md` for the full story.
+Built from lessons learned running force-merge/RSS/latency benchmarks on a 138M-doc
+SEISMIC sparse vector index across 3-node clusters. Every feature exists because its
+absence caused a real problem — a segment-count confound that nearly discarded a
+correct fix, a misaligned run that wasted hours, an invalidated run cited as a
+baseline, celebrated results that hid bugs. See `BENCHMARK_LESSONS_LEARNED.md`.
 
 ## License
 
