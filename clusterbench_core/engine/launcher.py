@@ -70,10 +70,21 @@ class LocalProcessLauncher:
             [sys.executable, "-m", "clusterbench_core.engine.worker", str(spec_file)], env=env
         )
         if self.budget is not None:
-            action = monitor_process(proc.pid, self.budget, interval=self.poll_interval)
+            # Monitor in a thread while the main thread reaps the child. Reaping is
+            # what lets monitor_process see the process end (an unreaped exited child
+            # is a zombie that psutil still reports as running → the guard would spin).
+            import threading
+            result: dict = {}
+
+            def _mon():
+                result["action"] = monitor_process(proc.pid, self.budget, interval=self.poll_interval)
+
+            th = threading.Thread(target=_mon, daemon=True)
+            th.start()
             proc.wait()
-            if action in (GuardAction.HARD_KILL, GuardAction.EMERGENCY_KILL):
-                return StepResult(status="ABORTED_GUARDRAIL", error=f"guard {action.value}")
+            th.join(timeout=5)
+            if result.get("action") in (GuardAction.HARD_KILL, GuardAction.EMERGENCY_KILL):
+                return StepResult(status="ABORTED_GUARDRAIL", error=f"guard {result['action'].value}")
         else:
             proc.wait()
 

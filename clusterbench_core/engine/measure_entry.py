@@ -19,7 +19,12 @@ from clusterbench_core.model import BenchmarkConfig
 def run_measure(config_json: str, domain_import: str, idx: dict) -> dict:
     cfg = BenchmarkConfig.from_dict(json.loads(config_json))
     mod, _, cls = domain_import.partition(":")
-    domain = getattr(importlib.import_module(mod), cls)()
+    cls_obj = getattr(importlib.import_module(mod), cls)
+    # Domains that need live resources (e.g. an OpenSearch client) expose
+    # reconstruct(cache_dir) to rebuild a handle to the already-running system
+    # from the persisted prep; others are simply no-arg constructible.
+    domain = (cls_obj.reconstruct(idx["cache_dir"])
+              if hasattr(cls_obj, "reconstruct") else cls_obj())
     recorder = EffectiveRecorder()
     art = domain.load_prep(idx["cache_dir"])
     out = domain.measure(cfg, art, recorder)

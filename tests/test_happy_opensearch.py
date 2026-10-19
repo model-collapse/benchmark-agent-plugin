@@ -57,3 +57,22 @@ def test_opensearch_splade_forcemerge_tuning(cluster, tmp_path):
     assert r["metrics"]["segments_after"] == 1
     assert "## What Went Wrong" in (Path(tmp_path) / res.best.run_id / "report.md").read_text()
     assert "naver/splade-v3" in (Path(tmp_path) / res.best.run_id / "config.yaml").read_text()
+
+
+def test_opensearch_subprocess_measure_attributable(cluster, tmp_path):
+    # Issue #3 remainder: measure runs in a subprocess that reconstructs a client to
+    # the running container; RSS flagged comparable and a per-index store metric reported.
+    from clusterbench_core.lifecycle import run_lifecycle
+    from clusterbench_domains.opensearch import OpenSearchDomain
+    from experiments.opensearch_splade import build_base_config
+
+    cfg = build_base_config(n_docs=2000, n_queries=40, vocab=3000, avg_nnz=40,
+                            ingest_chunks=8, baseline_segments=4)
+    base = build_base_config(n_docs=2000, n_queries=40, vocab=3000, avg_nnz=40,
+                             ingest_chunks=8, baseline_segments=4)
+    lr = run_lifecycle(cfg, OpenSearchDomain(cluster), workdir=tmp_path, baseline=base,
+                       measure_in_subprocess=True)
+    assert lr.result.status.value == "COMPLETED"
+    assert lr.result.measurement_flags["memory_comparable"] is True
+    assert lr.result.metrics["index_store_bytes"] > 0          # per-index attributable
+    assert lr.result.functional_validation["recall@10"] > 0.9  # subprocess measure worked

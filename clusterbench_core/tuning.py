@@ -143,7 +143,8 @@ class Tuner:
                  primary_metric="p50_ms", minimize=True,
                  quality_metric: str | None = "recall@10", quality_floor: float | None = None,
                  apply=True, budget: LoopBudget | None = None,
-                 replicates: int = 1, mde: float = 0.03, cv_ceiling: float = 0.15):
+                 replicates: int = 1, mde: float = 0.03, cv_ceiling: float = 0.15,
+                 measure_in_subprocess: bool = False):
         self.base = base
         self.domain = domain
         self.workdir = workdir
@@ -156,6 +157,7 @@ class Tuner:
         self.replicates = max(1, replicates)   # Gate 2: R independent measurement runs
         self.mde = mde                          # minimum detectable (relative) effect
         self.cv_ceiling = cv_ceiling
+        self.measure_in_subprocess = measure_in_subprocess
         self._cache: dict[tuple, Trial] = {}
 
     # ---- guard state ----
@@ -193,7 +195,8 @@ class Tuner:
         baseline_cfg.treatment_variable.name = treatment
         baseline_cfg.treatment_variable.value = incumbent.get(treatment)
         return run_lifecycle(cfg, self.domain, workdir=self.workdir,
-                             baseline=baseline_cfg, apply=self.apply).result
+                             baseline=baseline_cfg, apply=self.apply,
+                             measure_in_subprocess=self.measure_in_subprocess).result
 
     def _eval(self, coords: dict[str, Any], incumbent: dict[str, Any], treatment: str) -> Trial:
         import statistics

@@ -34,11 +34,25 @@ def _pct(xs, p):
 
 class OpenSearchDomain:
     name = "opensearch"
+    measure_import = "clusterbench_domains.opensearch:OpenSearchDomain"
 
     def __init__(self, cluster):
         self.cluster = cluster
         self.client = cluster.client()
         self._cache: dict[tuple, dict] = {}
+
+    @classmethod
+    def reconstruct(cls, cache_dir):
+        """Rebuild a handle to the already-running container (for subprocess
+        measurement) from the endpoint persisted in the prep."""
+        import json
+        from pathlib import Path
+
+        from clusterbench_domains.opensearch.cluster import OpenSearchCluster
+
+        d = json.loads((Path(cache_dir) / "os_prep.json").read_text())
+        cluster = OpenSearchCluster(port=d["port"], name=d["name"])  # not started; already running
+        return cls(cluster)
 
     def required_params(self):
         return load_manifest(_MANIFEST)
@@ -64,6 +78,7 @@ class OpenSearchDomain:
         (path / "os_prep.json").write_text(json.dumps({
             "index": e["index"], "queries": e["queries"],
             "ground_truth": e["ground_truth"], "meta": e["meta"],
+            "port": self.cluster.port, "name": self.cluster.name,  # endpoint for subprocess reconstruct
         }))
 
     def load_prep(self, path):
@@ -270,8 +285,16 @@ class OpenSearchDomain:
         total_s = time.time() - t_all
 
         recall = sum(recall_at_k(a, g, 10) for a, g in zip(approx, gt)) / max(1, len(gt))
+        # Container RSS is a shared JVM (diagnostic, NOT per-trial attributable).
         peak_rss_kb = max(self.cluster.mem_usage_kb(),
                           resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        # Per-index store size IS per-trial attributable (each trial has its own index)
+        # — the honest comparable memory metric for OpenSearch.
+        try:
+            index_store_bytes = self.client.indices.stats(index=index)["indices"][index][
+                "total"]["store"]["size_in_bytes"]
+        except Exception:  # noqa: BLE001
+            index_store_bytes = -1
 
         latencies_ms.sort()
         metrics = {
@@ -284,7 +307,8 @@ class OpenSearchDomain:
             "forcemerge_s": entry["meta"]["forcemerge_s"],
             "segments_before": entry["meta"]["segments_before"],
             "segments_after": entry["meta"]["segments_after"],
-            "peak_rss_kb": peak_rss_kb,
+            "index_store_bytes": index_store_bytes,   # per-index attributable
+            "peak_rss_kb": peak_rss_kb,                # shared-container diagnostic
         }
         phases = [
             PhaseMetrics(name="ingest", duration_s=entry["meta"]["ingest_s"], peak_rss_kb=peak_rss_kb),
