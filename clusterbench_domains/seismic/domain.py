@@ -210,7 +210,7 @@ class SeismicDomain:
         actual_docs = idx.len
         hits_ok = all(len(a) > 0 for a in approx_ids)
         passed = (actual_docs == expected_docs) and hits_ok
-        from clusterbench_core.discipline.metrics import recall_validation
+        from clusterbench_ops.splade import recall_validation
         return MeasureOutcome(
             metrics=metrics,
             phases=phases,

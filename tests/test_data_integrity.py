@@ -63,7 +63,7 @@ def test_full_ingest_is_not_failed(tmp_path):
 
 
 def test_recall_k_not_10_is_skipped_exploratory():
-    from clusterbench_core.discipline.metrics import recall_validation
+    from clusterbench_ops.splade import recall_validation
     fv = recall_validation(0.8, k=5, integrity_passed=True)
     assert fv["passed"] is None and "k==10" in fv["reason"]
     ok = recall_validation(0.9, k=10, integrity_passed=True)

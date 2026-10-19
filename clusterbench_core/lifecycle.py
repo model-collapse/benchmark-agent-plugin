@@ -217,7 +217,8 @@ def run_lifecycle(
 
     reproduced = False
     if prior is not None:
-        repro = reproduced_within_tolerance(prior, result)
+        repro = reproduced_within_tolerance(prior, result,
+                                            tolerances=cfg.reproduction_tolerances or None)
         reproduced = repro.reproduced
         notes.append(f"reproduction vs {prior.run_id}: "
                      f"{'REPRODUCED' if reproduced else 'NOT reproduced'}")

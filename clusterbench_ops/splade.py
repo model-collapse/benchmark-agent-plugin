@@ -105,3 +105,13 @@ def mean_recall(approx: list[list[int]], exact: list[list[int]], k: int) -> floa
 
 def avg_nnz(docs: list[SparseVec]) -> float:
     return (sum(len(d) for d in docs) / len(docs)) if docs else 0.0
+
+
+def recall_validation(recall: float, k: int, integrity_passed: bool, **extra) -> dict:
+    """SPLADE/IR functional-validation dict with the recall@10 fixed-k rule.
+    Lives here (not in the metric-agnostic engine core): k!=10 → recall@10 is
+    undefined for the comparison, so the run is marked skipped (passed=None)."""
+    base = {"recall@10": round(recall, 4), "k": k, **extra}
+    if k != 10:
+        return {"passed": None, "reason": "recall@10 requires k==10", **base}
+    return {"passed": integrity_passed, **base}
