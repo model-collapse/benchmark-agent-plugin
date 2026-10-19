@@ -3,9 +3,9 @@
 adaptive clamp applied right before the operation is recorded as the value
 ACTUALLY used — not the declared value re-read from the config."""
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
 
 
 class ClampDomain:
@@ -63,7 +63,7 @@ def test_effective_capture_matches_when_no_clamp(tmp_path):
 
 
 def test_clamp_run_is_tagged_unreliable_with_diff(tmp_path):
-    from clusterbench_core.model import ReliabilityTag
+    from benchmark_engine.model import ReliabilityTag
     lr = run_lifecycle(_cfg(query_cut=10), ClampDomain(clamp_to=2), workdir=tmp_path,
                        baseline=_cfg(query_cut=10))
     assert lr.result.reliability_tag is ReliabilityTag.UNRELIABLE
@@ -81,7 +81,7 @@ class CapturesUndeclaredDomain(ClampDomain):
 
 
 def test_undeclared_captured_param_does_not_false_trip(tmp_path):
-    from clusterbench_core.model import ReliabilityTag
+    from benchmark_engine.model import ReliabilityTag
     lr = run_lifecycle(_cfg(query_cut=10), CapturesUndeclaredDomain(clamp_to=99),
                        workdir=tmp_path, baseline=_cfg(query_cut=10))
     assert lr.result.reliability_tag is not ReliabilityTag.UNRELIABLE

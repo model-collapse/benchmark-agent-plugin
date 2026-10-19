@@ -23,7 +23,7 @@ moves the *primary* metric at the target scale, not just the quality metric.
 ## L3 — A single successful run is not a benchmark (2026-10-16)
 A happy path must be a **tuning search** that explores a space and recommends a
 configuration with a measured improvement — not one successful run. **Rule:** use
-`clusterbench_core.tuning.Tuner` (grid / refine / coordinate); report the
+`benchmark_engine.tuning.Tuner` (grid / refine / coordinate); report the
 trajectory + recommended config + improvement. Status: `Tuner` added; experiments
 and skills updated.
 
@@ -36,9 +36,9 @@ a run.
 ## L5 — task workers don't inherit the launcher's import path (2026-10-16, SUPERSEDED)
 A worker that imports a module *by name* fails with `ModuleNotFoundError` unless the
 import roots are propagated. **Superseded by the native engine:** experimaestro and
-`clusterbench_core/xpm.py` were removed; the native `LocalProcessLauncher` sets
+`benchmark_engine/xpm.py` were removed; the native `LocalProcessLauncher` sets
 `PYTHONPATH` to the repo root when it spawns the worker subprocess
-(`clusterbench_core/engine/launcher.py`), so the step module is always importable
+(`benchmark_engine/engine/launcher.py`), so the step module is always importable
 and this class of failure is designed out rather than worked around. Kept as the
 rationale for that design choice.
 

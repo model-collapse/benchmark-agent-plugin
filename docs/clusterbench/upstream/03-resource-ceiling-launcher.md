@@ -33,7 +33,7 @@ debouncing to avoid transient spikes, and an event log of guard actions.
 
 ## Reference implementation (willing to upstream)
 
-We built exactly this in ClusterBench (`clusterbench_core/guard.py`, GPL-3.0 —
+We built exactly this in ClusterBench (`benchmark_engine/guard.py`, GPL-3.0 —
 compatible with experimaestro's GPL-3.0):
 
 - `OOMGuard(budget).observe(rss_kb) -> OK | WARN | HARD_KILL | EMERGENCY_KILL`

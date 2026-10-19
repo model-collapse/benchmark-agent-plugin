@@ -7,7 +7,7 @@
 ## 1. Purpose
 
 Replace experimaestro (GPL-3.0) with a small, **clean-room, Apache-2.0 execution
-engine** owned by this project and merged into `clusterbench_core`. The engine is
+engine** owned by this project and merged into `benchmark_engine`. The engine is
 informed by *what* an experiment runner must do — not by experimaestro's code. Once
 experimaestro is gone from the base install, the whole project is relicensed
 Apache-2.0 to match the plugin ecosystem.
@@ -22,7 +22,7 @@ measurement is always re-run — the cache-vs-reproduction split.
   `Step` / `Launcher` / `Cache` / `Scheduler` execution layer. **No typed-`Param`
   metaclass** (we accept hand-declared dependencies and hand-declared cache keys;
   our configs are flat, so this is trivial and transparent).
-- **Drop experimaestro entirely** — remove `clusterbench_core/xpm.py` and the
+- **Drop experimaestro entirely** — remove `benchmark_engine/xpm.py` and the
   dependency.
 - **Relicense to Apache-2.0.**
 - **Full** capability target, delivered in **phases** (see §10): v1 local
@@ -33,7 +33,7 @@ measurement is always re-run — the cache-vs-reproduction split.
 New module tree under the engine (all Apache-2.0, no external GPL):
 
 ```
-clusterbench_core/
+benchmark_engine/
   model.py          # (existing) BenchmarkConfig, RunResult, signature()
   engine/
     step.py         # Step, StepRef, StepResult
@@ -125,7 +125,7 @@ in-memory cache) and is what unlocks subprocess isolation and (later) remote lau
 
 ## 8. Migration & relicense
 
-1. Build `clusterbench_core/engine/*`; wire `lifecycle`/`tuner` onto it behind the
+1. Build `benchmark_engine/engine/*`; wire `lifecycle`/`tuner` onto it behind the
    existing APIs (no change for callers/experiments).
 2. Add `save`/`load` to the three domains.
 3. Delete `xpm.py`, `tests/test_xpm.py`; drop `experimaestro` from `pyproject.toml`

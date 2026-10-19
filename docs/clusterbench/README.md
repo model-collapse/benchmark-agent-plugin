@@ -20,10 +20,10 @@ metric-agnostic.
 ## Architecture (strict one-way dependency)
 
 ```
-plugin (Claude Code skills) → clusterbench_domains → clusterbench_ops → clusterbench_core
+plugin (Claude Code skills) → benchmark_domains → benchmark_ops → benchmark_engine
 ```
 
-- **clusterbench_core** — the engine + discipline:
+- **benchmark_engine** — the engine + discipline:
   - `engine/` — the native execution engine: content-hash `signature`, on-disk
     content-addressed `cache` (atomic store + descriptor-verify), `step`/DAG,
     `scheduler` (parallel prep, serialized measurement), `launcher`
@@ -38,8 +38,8 @@ plugin (Claude Code skills) → clusterbench_domains → clusterbench_ops → cl
     effect>noise selection, and the **loop guard**; `sweep` is the single-grid primitive.
   - `measurement` (replication / MDE / CV), `guard` (OOM), `fingerprint` (env+code),
     `report_index` (results index + `load_runs` for analysis).
-- **clusterbench_ops** — SPLADE encoding (synthetic + real-model interface), recall ground truth.
-- **clusterbench_domains** — `demo` (template), `seismic`, `opensearch` + `required_params.yaml` manifests.
+- **benchmark_ops** — SPLADE encoding (synthetic + real-model interface), recall ground truth.
+- **benchmark_domains** — `demo` (template), `seismic`, `opensearch` + `required_params.yaml` manifests.
 - **plugin** — `clusterbench_plan` / `clusterbench_run` / `clusterbench_domain` skills + awareness hook.
 
 ## Experiment-fairness (the differentiator)
@@ -67,11 +67,11 @@ pip install -e ".[opensearch,seismic,dev]"
 
 ## Bring your own experiment
 
-Implement the `clusterbench_core.domain.Domain` protocol (5 methods minimum) and
+Implement the `benchmark_engine.domain.Domain` protocol (5 methods minimum) and
 drive it with the `Tuner`. See **`docs/clusterbench/DOMAIN_API.md`** for the full
 guide (required vs optional methods, the point-of-use capture rule, worked examples),
-and `clusterbench_domains/demo.py` as a template. Pull results into analysis with
-`clusterbench_core.report_index.load_runs(workdir)`.
+and `benchmark_domains/demo.py` as a template. Pull results into analysis with
+`benchmark_engine.report_index.load_runs(workdir)`.
 
 ## Reference happy paths (SPLADE)
 

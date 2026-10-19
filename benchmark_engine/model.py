@@ -2,7 +2,7 @@
 
 These are plain dataclasses (pure Python, no experimaestro runtime needed) so the
 discipline layer and the result schema are cheap to unit-test. The execution
-layer (clusterbench_ops) renders a BenchmarkConfig into experimaestro Tasks.
+layer (benchmark_ops) renders a BenchmarkConfig into experimaestro Tasks.
 """
 
 from __future__ import annotations

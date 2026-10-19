@@ -24,18 +24,18 @@ numbers from a hyperparameter sweep:
 
 ## Architecture (Approach C: lifecycle backbone + op-library + domain manifests)
 
-Strict one-way dependency: `plugin → clusterbench_domains → clusterbench_ops → clusterbench_core → experimaestro`.
+Strict one-way dependency: `plugin → benchmark_domains → benchmark_ops → benchmark_engine → experimaestro`.
 
 ```
-clusterbench_core/      engine: lifecycle backbone, discipline, guard, model/schema
-clusterbench_ops/       reusable op-tasks (encode, ingest, forcemerge, build, probe, eval)
-clusterbench_domains/   domain plugins + required_params manifests (opensearch, seismic)
+benchmark_engine/      engine: lifecycle backbone, discipline, guard, model/schema
+benchmark_ops/       reusable op-tasks (encode, ingest, forcemerge, build, probe, eval)
+benchmark_domains/   domain plugins + required_params manifests (opensearch, seismic)
 plugin/                 Claude Code harness: skills (plan/run/domain) + awareness hook
 experiments/            the two happy-path experiment scripts
 tests/                  unit + integration (fakes) + happy-path smoke
 ```
 
-### Layer 2a — `clusterbench_core`
+### Layer 2a — `benchmark_engine`
 
 - **model/** — `BenchmarkConfig` (typed experimaestro `Config`: hypothesis,
   treatment variable, controlled variables, resource budget, domain, phases),
@@ -58,14 +58,14 @@ tests/                  unit + integration (fakes) + happy-path smoke
   a `GuardedLauncher` wrapper (Slurm `--mem` on cluster; polling sidecar that
   SIGTERM/SIGKILLs at 85/92% on local/SSH).
 
-### Layer 2b — `clusterbench_ops`
+### Layer 2b — `benchmark_ops`
 
 Reusable, domain-agnostic op-tasks with typed params. Each declares inputs,
 outputs, and (optionally) whether it is a cacheable prep op or a measurement op:
 `SpladeEncode` (real transformers OR synthetic), `CorpusSource`, `Ingest`,
 `ForceMerge`, `BuildIndex`, `LatencyProbe`, `RecallEval`, `SmokeSearch`.
 
-### Layer — `clusterbench_domains`
+### Layer — `benchmark_domains`
 
 A `Domain` protocol: `apply_config`, `verify_config`, `required_params()`,
 `make_prep_tasks`, `make_measure_tasks`. Reference impls:

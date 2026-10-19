@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics
 
 # Module-level counter so tests can detect whether prep actually (re)built.
 BUILD_COUNT = 0
@@ -22,7 +22,7 @@ BUILD_COUNT = 0
 
 class DemoDomain:
     name = "demo"
-    measure_import = "clusterbench_domains.demo:DemoDomain"  # no-arg → subprocess-measurable
+    measure_import = "benchmark_domains.demo:DemoDomain"  # no-arg → subprocess-measurable
 
     def required_params(self) -> dict:
         return {}
@@ -51,7 +51,7 @@ class DemoDomain:
         (path / "artifact.json").write_text(json.dumps(artifact.meta))
 
     def load_prep(self, path) -> PrepArtifact:
-        from clusterbench_core.engine.cache import StaleArtifact
+        from benchmark_engine.engine.cache import StaleArtifact
 
         path = Path(path)
         meta = json.loads((path / "artifact.json").read_text())

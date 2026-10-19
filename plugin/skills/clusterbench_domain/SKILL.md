@@ -9,8 +9,8 @@ argument-hint: <domain_name> — e.g. "elasticsearch" or "qdrant"
 # ClusterBench Domain Authoring
 
 A domain is the seam between the generic engine and a concrete system. Implement
-the `clusterbench_core.domain.Domain` protocol. Template: `clusterbench_domains/demo.py`
-(minimal) and `clusterbench_domains/seismic/` or `.../opensearch/` (real).
+the `benchmark_engine.domain.Domain` protocol. Template: `benchmark_domains/demo.py`
+(minimal) and `benchmark_domains/seismic/` or `.../opensearch/` (real).
 
 ## Required pieces
 
@@ -40,7 +40,7 @@ its place when a prior run was invalidated by changing it silently. Entries are
 added, never removed.
 
 ### 3. Register + test
-Export from `clusterbench_domains/<name>/__init__.py`. Add a happy-path test
+Export from `benchmark_domains/<name>/__init__.py`. Add a happy-path test
 (mark `happy`) that builds a tiny real index and asserts a `Tuner` **search**
 (grid/refine/coordinate) recommends a faster configuration within the recall
 floor — not just one successful run (L3) — mirroring `tests/test_happy_seismic.py`.

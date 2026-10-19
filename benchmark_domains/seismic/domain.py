@@ -14,10 +14,10 @@ import time
 from pathlib import Path
 from statistics import quantiles
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.discipline.manifest import load_manifest
-from clusterbench_core.model import BenchmarkConfig
-from clusterbench_ops.splade import SyntheticSpladeEncoder, brute_force_topk, recall_at_k
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.discipline.manifest import load_manifest
+from benchmark_engine.model import BenchmarkConfig
+from benchmark_ops.splade import SyntheticSpladeEncoder, brute_force_topk, recall_at_k
 
 _MANIFEST = Path(__file__).with_name("required_params.yaml")
 
@@ -32,7 +32,7 @@ def _pct(latencies_ms, p):
 
 class SeismicDomain:
     name = "seismic"
-    measure_import = "clusterbench_domains.seismic:SeismicDomain"  # no-arg → subprocess-measurable
+    measure_import = "benchmark_domains.seismic:SeismicDomain"  # no-arg → subprocess-measurable
 
     def __init__(self):
         self._build_cache: dict[tuple, dict] = {}
@@ -197,7 +197,7 @@ class SeismicDomain:
             "peak_rss_kb": peak_rss_kb,
             "index_nnz": e["meta"]["index_nnz"],
         }
-        from clusterbench_core.model import PhaseMetrics
+        from benchmark_engine.model import PhaseMetrics
 
         phases = [
             PhaseMetrics(name="build", duration_s=e["meta"]["build_time_s"], peak_rss_kb=peak_rss_kb),
@@ -210,7 +210,7 @@ class SeismicDomain:
         actual_docs = idx.len
         hits_ok = all(len(a) > 0 for a in approx_ids)
         passed = (actual_docs == expected_docs) and hits_ok
-        from clusterbench_ops.splade import recall_validation
+        from benchmark_ops.splade import recall_validation
         return MeasureOutcome(
             metrics=metrics,
             phases=phases,

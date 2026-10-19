@@ -1,5 +1,5 @@
-from clusterbench_core.guard import GuardAction, OOMGuard, evaluate_stream
-from clusterbench_core.model import ResourceBudget
+from benchmark_engine.guard import GuardAction, OOMGuard, evaluate_stream
+from benchmark_engine.model import ResourceBudget
 
 RB = ResourceBudget(total_ram_kb=1000)  # warn 750, hard 850, emergency 920
 

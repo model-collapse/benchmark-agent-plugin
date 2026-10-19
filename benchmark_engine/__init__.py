@@ -1,6 +1,6 @@
 """ClusterBench core engine: model, discipline, guard, lifecycle."""
 
-from clusterbench_core.model import (
+from benchmark_engine.model import (
     BenchmarkConfig,
     ControlledVar,
     Param,

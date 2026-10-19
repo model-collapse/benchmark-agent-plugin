@@ -24,7 +24,7 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def cluster():
-    from clusterbench_domains.opensearch import OpenSearchCluster
+    from benchmark_domains.opensearch import OpenSearchCluster
 
     c = OpenSearchCluster(heap="4g").start(timeout_s=240)
     yield c
@@ -62,8 +62,8 @@ def test_opensearch_splade_forcemerge_tuning(cluster, tmp_path):
 def test_opensearch_subprocess_measure_attributable(cluster, tmp_path):
     # Issue #3 remainder: measure runs in a subprocess that reconstructs a client to
     # the running container; RSS flagged comparable and a per-index store metric reported.
-    from clusterbench_core.lifecycle import run_lifecycle
-    from clusterbench_domains.opensearch import OpenSearchDomain
+    from benchmark_engine.lifecycle import run_lifecycle
+    from benchmark_domains.opensearch import OpenSearchDomain
     from experiments.opensearch_splade import build_base_config
 
     cfg = build_base_config(n_docs=2000, n_queries=40, vocab=3000, avg_nnz=40,

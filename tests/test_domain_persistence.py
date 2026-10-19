@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Engine-level prep caching via domain save/load — reuse across runs/sessions."""
 
-import clusterbench_domains.demo as demo
-from clusterbench_domains.demo import DemoDomain
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import BenchmarkConfig, RunStatus, TreatmentVariable
+import benchmark_domains.demo as demo
+from benchmark_domains.demo import DemoDomain
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import BenchmarkConfig, RunStatus, TreatmentVariable
 
 
 def _cfg(knob):

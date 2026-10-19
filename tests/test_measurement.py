@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-from clusterbench_core.measurement import (
+from benchmark_engine.measurement import (
     MeasureStats,
     comparable_cv,
     is_real_improvement,

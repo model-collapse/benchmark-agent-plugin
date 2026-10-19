@@ -2,14 +2,14 @@
 
 from dataclasses import dataclass
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import (
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import (
     BenchmarkConfig,
     PhaseMetrics,
     ResourceBudget,
     TreatmentVariable,
 )
-from clusterbench_core.tuning import TuneDim, Tuner
+from benchmark_engine.tuning import TuneDim, Tuner
 
 
 @dataclass

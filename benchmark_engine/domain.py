@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics
 
 
 @dataclass

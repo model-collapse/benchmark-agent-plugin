@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from clusterbench_core.lifecycle import LifecycleResult, run_lifecycle
-from clusterbench_core.model import BenchmarkConfig, RunStatus
+from benchmark_engine.lifecycle import LifecycleResult, run_lifecycle
+from benchmark_engine.model import BenchmarkConfig, RunStatus
 
 
 @dataclass

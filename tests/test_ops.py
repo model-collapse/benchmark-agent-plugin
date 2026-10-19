@@ -1,4 +1,4 @@
-from clusterbench_ops.splade import (
+from benchmark_ops.splade import (
     SyntheticSpladeEncoder,
     avg_nnz,
     brute_force_topk,

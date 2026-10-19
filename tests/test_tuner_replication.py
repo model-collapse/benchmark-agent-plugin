@@ -2,9 +2,9 @@
 """Issue #1: with replication, the Tuner must reject a sub-noise 'speedup' and
 only select a difference that exceeds the measured noise (effect > noise)."""
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
-from clusterbench_core.tuning import TuneDim, Tuner
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
+from benchmark_engine.tuning import TuneDim, Tuner
 
 # deterministic per-replicate jitter (indexed by repro_nonce) → stdev ~1.1
 _NOISE = [1.5, -1.5, 1.0, -1.0, 0.5, -0.5, 0.0]

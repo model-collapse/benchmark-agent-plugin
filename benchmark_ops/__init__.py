@@ -1,6 +1,6 @@
 """Reusable, domain-agnostic op helpers (SPLADE encoding, recall ground truth)."""
 
-from clusterbench_ops.splade import (
+from benchmark_ops.splade import (
     SpladeEncoder,
     SyntheticSpladeEncoder,
     brute_force_topk,

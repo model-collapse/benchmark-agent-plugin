@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from clusterbench_core.model import ReliabilityTag
+from benchmark_engine.model import ReliabilityTag
 
 _SECTIONS = [
     (ReliabilityTag.RELIABLE, "Active Baselines (RELIABLE)"),

@@ -1,8 +1,8 @@
 import copy
 
-from clusterbench_core.discipline import analysis, manifest, preflight, reliability
-from clusterbench_core.discipline.reliability import ClassifyInput
-from clusterbench_core.model import ReliabilityTag, RunResult, RunStatus
+from benchmark_engine.discipline import analysis, manifest, preflight, reliability
+from benchmark_engine.discipline.reliability import ClassifyInput
+from benchmark_engine.model import ReliabilityTag, RunResult, RunStatus
 
 from conftest import FakeDomain, make_base_config
 

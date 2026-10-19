@@ -9,7 +9,7 @@ argument-hint: <domain> <hypothesis> — e.g. "opensearch 'force-merge to 1 segm
 # ClusterBench Planner
 
 The judgment layer for cluster-ops benchmarks built on the native ClusterBench
-engine (`clusterbench_core`). Plans fair, reproducible, honest runs.
+engine (`benchmark_engine`). Plans fair, reproducible, honest runs.
 
 ## Core Principles (non-negotiable)
 
@@ -38,10 +38,10 @@ with prior runs? Will the result be comparable to a baseline? If not, raise an
 Issue/Expected/Requested/Risk block and get rationale before proceeding.
 
 ### 2. Build a validated BenchmarkConfig
-Construct a `clusterbench_core.model.BenchmarkConfig` (see the experiment modules
+Construct a `benchmark_engine.model.BenchmarkConfig` (see the experiment modules
 in `experiments/` as templates). Then run the **manifest HARD GATE**:
 ```python
-from clusterbench_core.discipline.manifest import load_manifest, check_manifest, autofill_from_manifest
+from benchmark_engine.discipline.manifest import load_manifest, check_manifest, autofill_from_manifest
 m = domain.required_params()
 autofill_from_manifest(cfg, m)        # fill omitted manifest params from baseline
 chk = check_manifest(cfg, m)
@@ -63,14 +63,14 @@ search demonstrates an improvement over the default.
 ### 4. Write the experiment script — a tuning SEARCH, not a single run
 A benchmark deliverable must **search** the space and **recommend a configuration**
 (L3). Write/adapt `experiments/<domain>_<slug>.py` with a `run(workdir, ...)` that
-drives `clusterbench_core.tuning.Tuner`:
+drives `benchmark_engine.tuning.Tuner`:
 - `tuner.grid(TuneDim(name, values=[...]))` — discrete knob (e.g. segment counts).
 - `tuner.refine(TuneDim(name, bounds=(lo, hi)), points, rounds)` — iterative zoom
   for a continuous knob (search + convergence).
 - `tuner.coordinate([TuneDim, ...])` — joint multi-parameter descent.
 Configure `primary_metric` (p50_ms / build_time_s / forcemerge_s), `quality_metric`
 (recall@10) and a 1pp floor. The result exposes the trajectory, the recommended
-config, and `improvement` vs the start. (`clusterbench_core.sweep.sweep` remains
+config, and `improvement` vs the start. (`benchmark_engine.sweep.sweep` remains
 the low-level single-grid primitive the grid strategy builds on.)
 
 ### 5. Present the plan for approval, then hand to `clusterbench_run`.

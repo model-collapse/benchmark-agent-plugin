@@ -11,18 +11,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from clusterbench_core.discipline.manifest import autofill_from_manifest, load_manifest
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import (
+from benchmark_engine.discipline.manifest import autofill_from_manifest, load_manifest
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import (
     BenchmarkConfig,
     ControlledVar,
     ResourceBudget,
     TreatmentVariable,
 )
-from clusterbench_core.tuning import TuneDim, Tuner
-from clusterbench_domains.seismic import SeismicDomain
+from benchmark_engine.tuning import TuneDim, Tuner
+from benchmark_domains.seismic import SeismicDomain
 
-_MANIFEST = Path(__file__).parents[1] / "clusterbench_domains" / "seismic" / "required_params.yaml"
+_MANIFEST = Path(__file__).parents[1] / "benchmark_domains" / "seismic" / "required_params.yaml"
 
 
 def build_base_config(n_docs=50_000, n_queries=500, vocab=30_000, avg_nnz=50,
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     wd = sys.argv[1] if len(sys.argv) > 1 else "./clusterbench_data/seismic"
     res, info = run(wd)
-    from clusterbench_core.report_index import update_index
+    from benchmark_engine.report_index import update_index
     print(res.render())
     print("index:", update_index(wd))
     print(f"\nbaseline recall@10={info['baseline_recall']}  floor={info['recall_floor']:.4f}")

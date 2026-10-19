@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from clusterbench_core.model import BenchmarkConfig, RunResult
+from benchmark_engine.model import BenchmarkConfig, RunResult
 
 
 def generate_report(cfg: BenchmarkConfig, result: RunResult, prior: RunResult | None = None) -> str:

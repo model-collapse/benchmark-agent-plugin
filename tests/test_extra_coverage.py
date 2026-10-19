@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from clusterbench_core.guard import GuardAction, monitor_process
-from clusterbench_core.model import BenchmarkConfig, ResourceBudget, TreatmentVariable
-from clusterbench_domains.demo import DemoDomain
+from benchmark_engine.guard import GuardAction, monitor_process
+from benchmark_engine.model import BenchmarkConfig, ResourceBudget, TreatmentVariable
+from benchmark_domains.demo import DemoDomain
 
 
 def _cfg(v=0.5):
@@ -46,7 +46,7 @@ def test_monitor_process_missing_pid():
 
 
 def test_guard_render_paths():
-    from clusterbench_core.discipline.preflight import BaselineDiff, VerifyResult
+    from benchmark_engine.discipline.preflight import BaselineDiff, VerifyResult
     d = BaselineDiff(unexpected=[("x", 1, 2)], missing_from_new=[("y", 3)])
     assert "UNEXPECTED x" in d.render() and "MISSING y" in d.render()
     v = VerifyResult({"a": (1, 1, True), "b": (1, 2, False)})
@@ -54,9 +54,9 @@ def test_guard_render_paths():
 
 
 def test_reliability_render_and_report_abort():
-    from clusterbench_core.discipline import analysis
-    from clusterbench_core.discipline.reliability import reproduced_within_tolerance
-    from clusterbench_core.model import ReliabilityTag, RunResult, RunStatus
+    from benchmark_engine.discipline import analysis
+    from benchmark_engine.discipline.reliability import reproduced_within_tolerance
+    from benchmark_engine.model import ReliabilityTag, RunResult, RunStatus
     a = RunResult("a", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED,
                   metrics={"p50_ms": 10.0})
     b = RunResult("b", "s", RunStatus.COMPLETED, ReliabilityTag.QUALIFIED,

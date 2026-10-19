@@ -32,7 +32,7 @@ The discipline is defined **twice, in two languages**, and the two were never fu
 2. **Generic Domain:** a first-class `CommandDomain`, generalized to an **N-stage DAG** command pipeline (§7).
 3. **Resource management:** GPU **guardrails + accounting** — declare GPUs + VRAM per stage, pin via `CUDA_VISIBLE_DEVICES`, detect VRAM-OOM and fail loud, record GPU-hours and $cost as metrics and loop-guard budgets. No device scheduler/queue.
 4. **Entry point:** rename the skill to `/benchmark`; detached session-resilient execution is preserved as a run **mode**.
-5. **Packaging:** rename Python packages `clusterbench_core → benchmark_engine`, `clusterbench_ops → benchmark_ops`, `clusterbench_domains → benchmark_domains`; `docs/clusterbench/ → docs/benchmark/`.
+5. **Packaging:** rename Python packages `benchmark_engine → benchmark_engine`, `benchmark_ops → benchmark_ops`, `benchmark_domains → benchmark_domains`; `docs/clusterbench/ → docs/benchmark/`.
 
 ## 4. Architecture
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from clusterbench_core.engine.cache import SignatureCache, StaleArtifact
+from benchmark_engine.engine.cache import SignatureCache, StaleArtifact
 
 
 def test_store_then_hit(tmp_path):

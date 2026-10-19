@@ -12,8 +12,8 @@ from __future__ import annotations
 import importlib
 import json
 
-from clusterbench_core.engine.effective import EffectiveRecorder
-from clusterbench_core.model import BenchmarkConfig
+from benchmark_engine.engine.effective import EffectiveRecorder
+from benchmark_engine.model import BenchmarkConfig
 
 
 def run_measure(config_json: str, domain_import: str, idx: dict) -> dict:

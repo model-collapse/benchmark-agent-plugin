@@ -18,10 +18,10 @@ import time
 from pathlib import Path
 from statistics import quantiles
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.discipline.manifest import load_manifest
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics
-from clusterbench_ops.splade import SyntheticSpladeEncoder, brute_force_topk, recall_at_k
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.discipline.manifest import load_manifest
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics
+from benchmark_ops.splade import SyntheticSpladeEncoder, brute_force_topk, recall_at_k
 
 _MANIFEST = Path(__file__).with_name("required_params.yaml")
 
@@ -34,7 +34,7 @@ def _pct(xs, p):
 
 class OpenSearchDomain:
     name = "opensearch"
-    measure_import = "clusterbench_domains.opensearch:OpenSearchDomain"
+    measure_import = "benchmark_domains.opensearch:OpenSearchDomain"
 
     def __init__(self, cluster):
         self.cluster = cluster
@@ -48,7 +48,7 @@ class OpenSearchDomain:
         import json
         from pathlib import Path
 
-        from clusterbench_domains.opensearch.cluster import OpenSearchCluster
+        from benchmark_domains.opensearch.cluster import OpenSearchCluster
 
         d = json.loads((Path(cache_dir) / "os_prep.json").read_text())
         cluster = OpenSearchCluster(port=d["port"], name=d["name"])  # not started; already running
@@ -91,7 +91,7 @@ class OpenSearchDomain:
         # Artifact-descriptor verify: the live index must still exist with the
         # expected doc count — a torn-down/rebuilt container is a StaleArtifact,
         # not a silent reuse.
-        from clusterbench_core.engine.cache import StaleArtifact
+        from benchmark_engine.engine.cache import StaleArtifact
         expected_docs = int(d["meta"].get("n_docs", 0))
         try:
             live = self.client.count(index=d["index"])["count"]
@@ -321,7 +321,7 @@ class OpenSearchDomain:
         actual_docs = self.client.count(index=index)["count"]
         hits_ok = all(len(a) > 0 for a in approx)
         passed = (actual_docs == expected_docs) and hits_ok
-        from clusterbench_ops.splade import recall_validation
+        from benchmark_ops.splade import recall_validation
         return MeasureOutcome(metrics=metrics, phases=phases,
                               functional_validation=recall_validation(
                                   recall, k, passed, doc_count=actual_docs, expected_docs=expected_docs))

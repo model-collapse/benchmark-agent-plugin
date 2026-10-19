@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
-from clusterbench_core.model import ResourceBudget
+from benchmark_engine.model import ResourceBudget
 
 
 class GuardAction(str, Enum):

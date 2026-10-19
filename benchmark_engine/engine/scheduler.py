@@ -11,9 +11,9 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from clusterbench_core.engine.cache import SignatureCache
-from clusterbench_core.engine.signature import signature
-from clusterbench_core.engine.step import Step, StepRef, StepResult, edges
+from benchmark_engine.engine.cache import SignatureCache
+from benchmark_engine.engine.signature import signature
+from benchmark_engine.engine.step import Step, StepRef, StepResult, edges
 
 
 def _resolve(value, results: dict[str, StepResult]):

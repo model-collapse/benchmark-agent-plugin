@@ -1,7 +1,7 @@
 import yaml
 
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import ReliabilityTag, ResourceBudget, RunStatus
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import ReliabilityTag, ResourceBudget, RunStatus
 
 from conftest import FakeDomain, make_base_config
 
@@ -51,7 +51,7 @@ def test_forced_oom_aborts_guardrail_and_persists(tmp_path):
 
 
 def test_manifest_gate_blocks_lifecycle(tmp_path, fake_manifest_file):
-    from clusterbench_core.discipline.manifest import load_manifest
+    from benchmark_engine.discipline.manifest import load_manifest
     cfg = make_base_config(0.9)
     del cfg.params["fake.n_postings"]
     dom = FakeDomain(manifest=load_manifest(fake_manifest_file))
@@ -76,7 +76,7 @@ def test_reproduction_promotes_to_reliable(tmp_path):
 
 
 def test_lifecycle_runs_via_explicit_inprocess_launcher(tmp_path):
-    from clusterbench_core.engine.launcher import InProcessLauncher
+    from benchmark_engine.engine.launcher import InProcessLauncher
     cfg = make_base_config(0.9)
     lr = run_lifecycle(cfg, FakeDomain(), workdir=tmp_path, baseline=make_base_config(0.7),
                        launcher=InProcessLauncher())

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from clusterbench_core.model import BenchmarkConfig
+from benchmark_engine.model import BenchmarkConfig
 
 
 @dataclass

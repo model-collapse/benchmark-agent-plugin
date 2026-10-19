@@ -13,7 +13,7 @@ clear PASS/FAIL with evidence.
 
 ## 0. What ClusterBench is (1 paragraph)
 
-An engine (`clusterbench_core`) — a native, self-contained Apache-2.0 engine — that runs benchmarks
+An engine (`benchmark_engine`) — a native, self-contained Apache-2.0 engine — that runs benchmarks
 through a disciplined lifecycle (resource budget → required-params manifest gate →
 3-phase preflight → cacheable prep → guarded measurement → functional validation →
 reliability tagging → persisted report), plus a **hyperparameter Tuner**

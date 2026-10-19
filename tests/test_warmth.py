@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
-from clusterbench_core.discipline.manifest import load_manifest
+from benchmark_engine.discipline.manifest import load_manifest
 
-ROOT = Path(__file__).resolve().parents[1] / "clusterbench_domains"
+ROOT = Path(__file__).resolve().parents[1] / "benchmark_domains"
 
 
 def test_warmup_is_a_controlled_param_in_both_manifests():

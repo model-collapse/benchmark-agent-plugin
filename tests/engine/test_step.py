@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-from clusterbench_core.engine.step import Step, StepRef, StepResult, edges
+from benchmark_engine.engine.step import Step, StepRef, StepResult, edges
 
 
 def _s(name, inputs=None, depends_on=None, cacheable=True):

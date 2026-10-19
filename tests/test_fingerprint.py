@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
-from clusterbench_core.fingerprint import (
+from benchmark_engine.fingerprint import (
     BaselineFingerprintMismatch,
     assert_comparable_fingerprint,
     env_fingerprint,

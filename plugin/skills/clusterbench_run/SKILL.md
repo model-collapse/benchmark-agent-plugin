@@ -41,7 +41,7 @@ hashes the deterministic prep (index build) and reuses it across trials with an
 identical build-key — measurement is always re-run. For attributable per-trial
 memory, pass `measure_in_subprocess=True`, which runs the measurement under the
 OOM-guarded `LocalProcessLauncher` so RSS is isolated from the parent. Multi-step
-DAGs use `clusterbench_core.engine.scheduler` (parallel prep, serialized
+DAGs use `benchmark_engine.engine.scheduler` (parallel prep, serialized
 measurement) over the on-disk `SignatureCache`.
 
 ## Preflight is enforced by the engine

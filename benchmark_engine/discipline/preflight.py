@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from clusterbench_core.model import BenchmarkConfig
+from benchmark_engine.model import BenchmarkConfig
 
 
 # ----------------------------- Phase A -------------------------------------

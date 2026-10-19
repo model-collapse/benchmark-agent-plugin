@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import (
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import (
     BenchmarkConfig,
     ControlledVar,
     PhaseMetrics,

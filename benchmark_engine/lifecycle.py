@@ -16,15 +16,15 @@ from pathlib import Path
 
 import yaml
 
-from clusterbench_core.discipline import analysis, preflight
-from clusterbench_core.discipline.manifest import check_manifest
-from clusterbench_core.discipline.reliability import (
+from benchmark_engine.discipline import analysis, preflight
+from benchmark_engine.discipline.manifest import check_manifest
+from benchmark_engine.discipline.reliability import (
     ClassifyInput,
     classify,
     reproduced_within_tolerance,
 )
-from clusterbench_core.guard import OOMGuard, GuardAction
-from clusterbench_core.model import (
+from benchmark_engine.guard import OOMGuard, GuardAction
+from benchmark_engine.model import (
     BenchmarkConfig,
     PhaseMetrics,
     ReliabilityTag,
@@ -109,13 +109,13 @@ def run_lifecycle(
     # If the domain exposes build_key()+save_prep()+load_prep(), prep is cached
     # on-disk by its build signature and reused across runs/sessions; the artifact
     # is persisted into the prep step dir and loaded back on a cache hit.
-    from clusterbench_core.engine.cache import SignatureCache
-    from clusterbench_core.engine.effective import EffectiveRecorder
-    from clusterbench_core.engine.launcher import InProcessLauncher
-    from clusterbench_core.engine.scheduler import Scheduler
-    from clusterbench_core.engine.step import Step, StepRef
+    from benchmark_engine.engine.cache import SignatureCache
+    from benchmark_engine.engine.effective import EffectiveRecorder
+    from benchmark_engine.engine.launcher import InProcessLauncher
+    from benchmark_engine.engine.scheduler import Scheduler
+    from benchmark_engine.engine.step import Step, StepRef
 
-    from clusterbench_core.engine.launcher import LocalProcessLauncher
+    from benchmark_engine.engine.launcher import LocalProcessLauncher
 
     cacheable = all(hasattr(domain, m) for m in ("build_key", "save_prep", "load_prep"))
     cache = SignatureCache(Path(workdir) / "_cache") if cacheable else None
@@ -131,7 +131,7 @@ def run_lifecycle(
         desc = domain.prep_descriptor(art) if hasattr(domain, "prep_descriptor") else {}
         if cacheable:
             domain.save_prep(art, prep_wd)   # into the step workdir → scheduler caches it
-            from clusterbench_core.fingerprint import env_fingerprint
+            from benchmark_engine.fingerprint import env_fingerprint
             (prep_wd / "_fingerprint.json").write_text(json.dumps(env_fingerprint()))
         out = {"descriptor": desc}
         if not subprocess_measure:           # in-process keeps the live artifact in-memory
@@ -143,7 +143,7 @@ def run_lifecycle(
         if art is None:                       # cache hit (or subprocess) → load from disk
             fp_file = Path(idx["cache_dir"]) / "_fingerprint.json"
             if fp_file.exists():
-                from clusterbench_core.fingerprint import (
+                from benchmark_engine.fingerprint import (
                     assert_comparable_fingerprint, env_fingerprint)
                 assert_comparable_fingerprint(json.loads(fp_file.read_text()), env_fingerprint())
             art = domain.load_prep(idx["cache_dir"])
@@ -155,7 +155,7 @@ def run_lifecycle(
                      cache_key=tuple(domain.build_key(cfg)) if cacheable else None,
                      cacheable=cacheable)
     if subprocess_measure:
-        measure_step = Step(name="measure", fn="clusterbench_core.engine.measure_entry:run_measure",
+        measure_step = Step(name="measure", fn="benchmark_engine.engine.measure_entry:run_measure",
                             inputs={"config_json": json.dumps(cfg.to_dict()),
                                     "domain_import": domain.measure_import,
                                     "idx": StepRef("prep")}, cacheable=False)
@@ -202,7 +202,7 @@ def run_lifecycle(
     notes: list[str] = []
 
     # Gate 1 — effective-vs-declared signature gate
-    from clusterbench_core.engine.signature import field_diff, signature as _sig
+    from benchmark_engine.engine.signature import field_diff, signature as _sig
     # Only gate params the config actually declares; a captured value whose name
     # is not a declared config param is not an identity param to compare against.
     declared_subset = {n: cfg.get(n) for n in effective_params if n in cfg.params}
@@ -235,7 +235,7 @@ def run_lifecycle(
     # in-process peak_rss (ru_maxrss) is a process high-water mark contaminated by
     # prep and prior trials — flag it so the tuner never selects on it.
     result.measurement_flags = {"memory_comparable": subprocess_measure}
-    from clusterbench_core.discipline.reliability import fairness_assert
+    from benchmark_engine.discipline.reliability import fairness_assert
     fairness_assert(result)  # fail-loud: effective!=declared can never be RELIABLE/QUALIFIED
     cfg.assert_unchanged()   # Gate 1: config must not have mutated during the run
     lr = _finish(run_dir, cfg, result, prior)
@@ -272,5 +272,5 @@ def _provenance(cfg: BenchmarkConfig, result: RunResult, launcher) -> dict:
 
 
 def _env_fingerprint() -> dict:
-    from clusterbench_core.fingerprint import env_fingerprint
+    from benchmark_engine.fingerprint import env_fingerprint
     return env_fingerprint()

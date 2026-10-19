@@ -21,9 +21,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from clusterbench_core.engine.step import Step, StepResult
-from clusterbench_core.guard import GuardAction, monitor_process
-from clusterbench_core.model import ResourceBudget
+from benchmark_engine.engine.step import Step, StepResult
+from benchmark_engine.guard import GuardAction, monitor_process
+from benchmark_engine.model import ResourceBudget
 
 _RESULT_KEYS = ("metrics", "outputs", "effective_params", "phases")
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
@@ -67,7 +67,7 @@ class LocalProcessLauncher:
         env["PYTHONPATH"] = _REPO_ROOT + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
         proc = subprocess.Popen(
-            [sys.executable, "-m", "clusterbench_core.engine.worker", str(spec_file)], env=env
+            [sys.executable, "-m", "benchmark_engine.engine.worker", str(spec_file)], env=env
         )
         if self.budget is not None:
             # Monitor in a thread while the main thread reaps the child. Reaping is

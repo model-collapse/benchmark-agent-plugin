@@ -11,8 +11,8 @@ your own primary/quality metrics and emit whatever metrics you like.
 ## Minimal Domain (5 methods — everything else is optional)
 
 ```python
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import PhaseMetrics
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import PhaseMetrics
 
 class MyDomain:
     name = "mysystem"
@@ -35,7 +35,7 @@ class MyDomain:
 
 Run it:
 ```python
-from clusterbench_core.tuning import Tuner, TuneDim
+from benchmark_engine.tuning import Tuner, TuneDim
 tuner = Tuner(base_cfg, MyDomain(), workdir, primary_metric="p50_ms", minimize=True,
               quality_metric="ndcg@10", quality_floor=0.40,
               replicates=7,                       # noise-band selection (Gate 2)
@@ -65,7 +65,7 @@ run is auto-tagged UNRELIABLE.
 - **You:** the model/encoder, the dataset + qrels, the quality metric computation, the backend calls.
 - **Harness:** everything about running it *fairly and reproducibly*, searching the config space, caching, and reporting.
 
-See `clusterbench_domains/demo.py` (minimal), `clusterbench_domains/seismic/` and
-`clusterbench_domains/opensearch/` (full, with caching + subprocess measure) as
+See `benchmark_domains/demo.py` (minimal), `benchmark_domains/seismic/` and
+`benchmark_domains/opensearch/` (full, with caching + subprocess measure) as
 worked examples. Analyze results with
-`clusterbench_core.report_index.load_runs(workdir)` → rows for pandas/notebook.
+`benchmark_engine.report_index.load_runs(workdir)` → rows for pandas/notebook.

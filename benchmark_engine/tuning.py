@@ -27,8 +27,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import BenchmarkConfig, ReliabilityTag, RunStatus
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import BenchmarkConfig, ReliabilityTag, RunStatus
 
 _COMPARABLE_TAGS = (ReliabilityTag.RELIABLE, ReliabilityTag.QUALIFIED)
 
@@ -217,7 +217,7 @@ class Tuner:
         if primaries:
             primary = statistics.median(primaries)
             if self.replicates > 1 and len(primaries) > 1:
-                from clusterbench_core.measurement import MeasureStats
+                from benchmark_engine.measurement import MeasureStats
                 sd = statistics.pstdev(primaries)
                 cv = sd / primary if primary else 0.0
                 stats = MeasureStats(median=primary, stdev=sd, cv=cv, n=len(primaries),
@@ -236,7 +236,7 @@ class Tuner:
             r.status is RunStatus.COMPLETED and r.reliability_tag in _COMPARABLE_TAGS and not r.signature_diff
             for r in results)
         if stats is not None:
-            from clusterbench_core.measurement import comparable_cv
+            from benchmark_engine.measurement import comparable_cv
             reps_comparable = reps_comparable and comparable_cv(stats, self.cv_ceiling)
         comparable = all_completed and reps_comparable
 
@@ -295,7 +295,7 @@ class Tuner:
         # With replicates, require the improvement to exceed the measured noise
         # (CI excludes 0 AND >= MDE) — never pick on sub-noise jitter.
         if a.stats is not None and b.stats is not None:
-            from clusterbench_core.measurement import is_real_improvement
+            from benchmark_engine.measurement import is_real_improvement
             return is_real_improvement(b.stats, a.stats, mde=self.mde, minimize=self.minimize)
         return (a.primary < b.primary) if self.minimize else (a.primary > b.primary)
 

@@ -34,13 +34,13 @@
 ### Task 1: Rename `clusterbench_* → benchmark_engine/ops/domains`
 
 **Files:**
-- Rename dirs: `clusterbench_core/ → benchmark_engine/`, `clusterbench_ops/ → benchmark_ops/`, `clusterbench_domains/ → benchmark_domains/`
+- Rename dirs: `benchmark_engine/ → benchmark_engine/`, `benchmark_ops/ → benchmark_ops/`, `benchmark_domains/ → benchmark_domains/`
 - Modify: every `.py` under those packages + `experiments/` + `tests/`, `pyproject.toml`, `plugin/hooks/*` (hook module/body), `plugin/skills/*/SKILL.md` references, `docs/`
 - Test: the entire existing suite (`tests/`) is the verification.
 
 **Interfaces:**
 - Consumes: nothing (first task).
-- Produces: packages `benchmark_engine`, `benchmark_ops`, `benchmark_domains` with identical public APIs under new names. All import paths `clusterbench_core`→`benchmark_engine`, `clusterbench_ops`→`benchmark_ops`, `clusterbench_domains`→`benchmark_domains`.
+- Produces: packages `benchmark_engine`, `benchmark_ops`, `benchmark_domains` with identical public APIs under new names. All import paths `benchmark_engine`→`benchmark_engine`, `benchmark_ops`→`benchmark_ops`, `benchmark_domains`→`benchmark_domains`.
 
 - [ ] **Step 1: Baseline the suite is green before touching anything**
 
@@ -51,19 +51,19 @@ Expected: `134 passed`.
 
 ```bash
 cd /home/ubuntu/auto-exp/benchmark-agent-plugin
-git mv clusterbench_core benchmark_engine
-git mv clusterbench_ops benchmark_ops
-git mv clusterbench_domains benchmark_domains
+git mv benchmark_engine benchmark_engine
+git mv benchmark_ops benchmark_ops
+git mv benchmark_domains benchmark_domains
 ```
 
 - [ ] **Step 3: Rewrite all import strings and dotted references**
 
 ```bash
-grep -rl --include=*.py --include=*.toml --include=*.md --include=*.py 'clusterbench_core\|clusterbench_ops\|clusterbench_domains' . \
-  | xargs sed -i 's/clusterbench_core/benchmark_engine/g; s/clusterbench_ops/benchmark_ops/g; s/clusterbench_domains/benchmark_domains/g'
+grep -rl --include=*.py --include=*.toml --include=*.md --include=*.py 'benchmark_engine\|benchmark_ops\|benchmark_domains' . \
+  | xargs sed -i 's/benchmark_engine/benchmark_engine/g; s/benchmark_ops/benchmark_ops/g; s/benchmark_domains/benchmark_domains/g'
 ```
-Also fix the subprocess worker/measure_entry module strings (they live inside the moved package, so the sed above covers `"clusterbench_core.engine.worker"` etc.). Grep to confirm none remain:
-Run: `grep -rn 'clusterbench_core\|clusterbench_ops\|clusterbench_domains' --include=*.py --include=*.toml .`
+Also fix the subprocess worker/measure_entry module strings (they live inside the moved package, so the sed above covers `"benchmark_engine.engine.worker"` etc.). Grep to confirm none remain:
+Run: `grep -rn 'benchmark_engine\|benchmark_ops\|benchmark_domains' --include=*.py --include=*.toml .`
 Expected: no output.
 
 - [ ] **Step 4: Update pyproject package discovery**
@@ -599,7 +599,7 @@ def _grep(pattern, *paths):
     return [l for l in r.stdout.splitlines() if l]
 
 def test_no_clusterbench_imports_in_code():
-    assert _grep("clusterbench_core", "benchmark_engine", "benchmark_ops", "benchmark_domains", "experiments") == []
+    assert _grep("benchmark_engine", "benchmark_engine", "benchmark_ops", "benchmark_domains", "experiments") == []
 
 def test_no_experimaestro_in_user_docs():
     hits = _grep("experimaestro", "README.md", "docs/benchmark/README.md", "docs/benchmark/DOMAIN_API.md")

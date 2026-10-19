@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-from clusterbench_core.engine.signature import signature, field_diff
+from benchmark_engine.engine.signature import signature, field_diff
 
 
 def test_signature_stable_and_order_independent():

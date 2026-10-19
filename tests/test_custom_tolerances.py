@@ -2,9 +2,9 @@
 """Harness gap #1: a researcher's custom metric must be reproduction-gated when a
 tolerance is declared on the config (not only the built-in IR/latency metrics)."""
 
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import ReliabilityTag, RunResult, RunStatus
-from clusterbench_core.discipline.reliability import reproduced_within_tolerance
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import ReliabilityTag, RunResult, RunStatus
+from benchmark_engine.discipline.reliability import reproduced_within_tolerance
 
 from conftest import FakeDomain, make_base_config
 

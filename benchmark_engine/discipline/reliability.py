@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from clusterbench_core.model import ReliabilityTag, RunResult
+from benchmark_engine.model import ReliabilityTag, RunResult
 
 # Engine-generic default reproduction tolerances for the common latency/memory
 # metrics (relative). Domain/experiment-specific metrics (recall@10, build/merge

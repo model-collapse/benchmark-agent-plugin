@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Subprocess worker: load a step function by name, run it, write a result JSON.
 
-Invoked as ``python -m clusterbench_core.engine.worker <spec.json>``. The parent
+Invoked as ``python -m benchmark_engine.engine.worker <spec.json>``. The parent
 sets PYTHONPATH so the step module is importable here (ClusterBench owns this
 launch, so there is no missing-import gap).
 """
