@@ -1,7 +1,7 @@
 {
   "name": "benchmark-agent",
   "version": "1.6.2",
-  "description": "Autonomous benchmark agent with fair comparison, safety guardrails, skeptical analysis, and persistent result management. Includes experiment awareness hooks that transparently detect benchmark work and load relevant context.",
+  "description": "One general-purpose /benchmark skill backed by a native engine: plan, run (sync or detached), tune, analyze, compare and track experiments on any system with fair comparison, a required-params gate, resource/OOM guardrails, a loop-guarded tuner and honest reports. Benchmark anything via the generic CommandDomain (shell-stage DAG) or a Python Domain; an awareness hook loads prior context transparently.",
   "author": {
     "name": "neural-sparse"
   },

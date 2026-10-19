@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Experiment-awareness hook for the ClusterBench plugin.
+"""Benchmark-awareness hook for the unified benchmark plugin.
 
-Detects cluster-ops / sparse-retrieval benchmark work and injects prior
-ClusterBench context (results index, lessons) so the agent plans with memory.
-Adapted from the model-collapse benchmark-agent-plugin.
+Detects benchmark/experiment work and injects prior context (results index,
+lessons, recent runs) so the agent plans with memory. The single awareness hook
+for the one `/benchmark` skill.
 """
 
 import glob
@@ -14,7 +14,8 @@ import sys
 
 STRONG = [r"\bbenchmark\b", r"\bforce.?merge\b", r"\blatency\b", r"\bthroughput\b",
           r"\bp50\b", r"\bp95\b", r"\bp99\b", r"\bQPS\b", r"\brecall@\d+\b",
-          r"\bSPLADE\b", r"\bSEISMIC\b", r"\bopensearch\b", r"\bOOM\b", r"\bpeak\s*mem"]
+          r"\bSPLADE\b", r"\bSEISMIC\b", r"\bopensearch\b", r"\bOOM\b", r"\bpeak\s*mem",
+          r"\bembedding\b", r"\bfine.?tun", r"\bcheckpoint\b", r"\beval\b"]
 WEAK = [r"\bcompare\b", r"\bbaseline\b", r"\bfaster\b", r"\bslower\b",
         r"\bregress", r"\btune\b", r"\boptimi[sz]e\b", r"\bspeed\b"]
 
@@ -22,7 +23,7 @@ WEAK = [r"\bcompare\b", r"\bbaseline\b", r"\bfaster\b", r"\bslower\b",
 def find_home(cwd):
     path = os.path.abspath(cwd)
     for _ in range(5):
-        cand = os.path.join(path, "clusterbench_data")
+        cand = os.path.join(path, "benchmark_data")
         if os.path.isdir(cand):
             return cand
         parent = os.path.dirname(path)
@@ -61,7 +62,7 @@ def handle(data):
     parts = []
     idx = os.path.join(home, "results_index.md")
     if os.path.exists(idx):
-        parts.append("Prior ClusterBench results index:\n" + load_head(idx, 25))
+        parts.append("Prior benchmark results index:\n" + load_head(idx, 25))
     lessons = os.path.join(home, "lessons.md")
     if os.path.exists(lessons):
         parts.append("Lessons:\n" + load_head(lessons, 15))
@@ -69,9 +70,9 @@ def handle(data):
     if runs:
         parts.append("Recent runs:\n" + "\n".join("  - " + os.path.basename(r) for r in runs))
     if parts:
-        hint = ("\n\nUse the clusterbench_plan skill to plan a fair, manifest-gated run "
+        hint = ("\n\nUse the benchmark skill (plan) to plan a fair, manifest-gated run "
                 "before executing.")
-        emit("[ClusterBench Awareness]\n" + "\n\n".join(parts) + hint)
+        emit("[Benchmark Awareness]\n" + "\n\n".join(parts) + hint)
 
 
 def main():
