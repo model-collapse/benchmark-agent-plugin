@@ -1,6 +1,6 @@
 ---
 name: clusterbench_run
-description: Execute an approved ClusterBench plan — run the tuning search via the experimaestro engine (locally or on a cluster), manage the OpenSearch Docker cluster lifecycle, persist results, and hand back to analysis. Never makes analytical decisions.
+description: Execute an approved ClusterBench plan — run the tuning search via the native ClusterBench engine (locally or on a cluster), manage the OpenSearch Docker cluster lifecycle, persist results, and hand back to analysis. Never makes analytical decisions.
 allowed-tools: Bash, Read, Write, Edit
 user-invocable: true
 argument-hint: <experiment_module> [workdir] — e.g. "experiments.opensearch_splade ./clusterbench_data/os"
@@ -13,8 +13,8 @@ All judgment belongs to `clusterbench_plan`.
 
 ## Preconditions
 - An approved experiment script exists under `experiments/`.
-- The env is active: `conda activate clusterbench` (experimaestro, opensearch-py,
-  pyseismic-lsr installed).
+- The env is active: `conda activate clusterbench` (opensearch-py,
+  pyseismic-lsr installed; the engine itself has no third-party runtime deps).
 
 ## Execute
 
@@ -35,10 +35,14 @@ python -m experiments.opensearch_splade ./clusterbench_data/opensearch
 The container is OOM-guarded by the engine's `ResourceBudget` (SIGTERM at 85%,
 SIGKILL at 92% of declared RAM). Confirm teardown with `docker ps`.
 
-### Via the experimaestro scheduler (caching / launchers)
-For a single lifecycle with experimaestro signature-caching and launcher support
-(local/SSH/Slurm), use `clusterbench_core.xpm.run_on_experimaestro(cfg,
-"pkg.module:Domain", workroot)` — identical configs are a cache hit.
+### Caching and subprocess isolation (native engine)
+Signature-caching is automatic: `run_lifecycle(cfg, domain, workdir=...)` content-
+hashes the deterministic prep (index build) and reuses it across trials with an
+identical build-key — measurement is always re-run. For attributable per-trial
+memory, pass `measure_in_subprocess=True`, which runs the measurement under the
+OOM-guarded `LocalProcessLauncher` so RSS is isolated from the parent. Multi-step
+DAGs use `clusterbench_core.engine.scheduler` (parallel prep, serialized
+measurement) over the on-disk `SignatureCache`.
 
 ## Preflight is enforced by the engine
 Before any measurement the lifecycle runs: budget check → manifest gate →

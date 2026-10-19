@@ -23,6 +23,9 @@ Or install directly from repo:
 |-------|---------|---------|
 | **benchmark_agent** | `/benchmark_agent` | Brain — plans, validates, generates scripts, analyzes results, manages history |
 | **benchmark_run** | `/benchmark_run` | Muscle — launches nohup scripts, monitors via `/loop`, detects completion |
+| **clusterbench_plan** | `/clusterbench_plan` | Plan a ClusterBench experiment — fair comparison, manifest gate, tuning search; produces a validated config + script |
+| **clusterbench_run** | `/clusterbench_run` | Execute an approved ClusterBench plan via the native engine; manages cluster lifecycle, persists results |
+| **clusterbench_domain** | `/clusterbench_domain` | Author a new ClusterBench domain (a system to benchmark) against the `Domain` protocol |
 
 ## How It Works
 
@@ -69,6 +72,23 @@ You: "run it"
 - **Physical Artifact Verification** — Catches logical vs physical file format mismatches
 - **Phase Decomposition** — Instruments per-phase to reveal true bottlenecks
 - **Resource Budget** — Computes worst-case before execution to prevent OOM
+
+## ClusterBench — programmatic experiment harness
+
+Alongside the autonomous agent above, the plugin ships **ClusterBench**: a
+reproducible, code-backed experiment harness with its own native, self-contained
+execution engine (Apache-2.0, no external workflow engine). Where the agent drives
+nohup shell scripts, ClusterBench runs experiments as Python with a content-addressed
+cache, a hyperparameter **Tuner** (grid / refine / coordinate), and a two-gate
+experiment-fairness system plus a loop guard that stops the search from chasing
+unfair or noise-level "wins". You wrap any system (database, index, service) in a
+`Domain` and the harness stays metric-agnostic; it ships OpenSearch (`rank_features`
+SPLADE) and SEISMIC reference domains.
+
+Use `/clusterbench_plan` → `/clusterbench_run`, and `/clusterbench_domain` to add a
+new system. Full overview, architecture, setup, and the bring-your-own-`Domain`
+guide live in **[`docs/clusterbench/README.md`](docs/clusterbench/README.md)** and
+**[`docs/clusterbench/DOMAIN_API.md`](docs/clusterbench/DOMAIN_API.md)**.
 
 ## Data Directory
 

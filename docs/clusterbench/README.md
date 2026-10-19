@@ -88,9 +88,9 @@ faster p50 at equal recall; SEISMIC heap_factor ≈ 1.4–2.2× faster within a 
 
 ```bash
 pytest -m "not happy"    # 134 fast, deterministic tests, no external deps
-pytest -m engine         #   (subset) native engine integration (spawns worker subprocess)
 pytest -m happy          # 3 end-to-end smoke tests: real OpenSearch (Docker) + SEISMIC
 ```
 137 tests total. The fast suite (`-m "not happy"`) exercises the engine, discipline,
-both fairness gates and the loop guard with no external dependencies; the 3 `happy`
-tests add real-cluster coverage of the reference domains.
+both fairness gates and the loop guard with no external dependencies — including the
+native-engine integration tests in `tests/engine/` that spawn a real worker
+subprocess; the 3 `happy` tests add real-cluster coverage of the reference domains.

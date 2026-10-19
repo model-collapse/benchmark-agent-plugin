@@ -33,11 +33,14 @@ container ("Up 20 minutes" stray). **Rule:** cluster lifecycle must be in a
 `try/finally` (or context manager); `clusterbench_run` verifies `docker ps` after
 a run.
 
-## L5 — experimaestro task workers don't inherit the launcher's import path (2026-10-16)
-A `Task.execute()` that imports a module *by name* fails with `ModuleNotFoundError`
-in the worker; `project_paths` is git-info only. **Rule:** pass import roots via
-`experiment(python_path=[...])` (upstream PR) or set `PYTHONPATH` before submit
-(current workaround in `clusterbench_core/xpm.py`).
+## L5 — task workers don't inherit the launcher's import path (2026-10-16, SUPERSEDED)
+A worker that imports a module *by name* fails with `ModuleNotFoundError` unless the
+import roots are propagated. **Superseded by the native engine:** experimaestro and
+`clusterbench_core/xpm.py` were removed; the native `LocalProcessLauncher` sets
+`PYTHONPATH` to the repo root when it spawns the worker subprocess
+(`clusterbench_core/engine/launcher.py`), so the step module is always importable
+and this class of failure is designed out rather than worked around. Kept as the
+rationale for that design choice.
 
 ## Domain-specific gotchas
 - **SEISMIC:** token arrays must be numpy `dtype='U30'` (`seismic.get_seismic_string()`)

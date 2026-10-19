@@ -1,6 +1,6 @@
 ---
 name: clusterbench_plan
-description: Plan a cluster-ops benchmark (OpenSearch/SEISMIC/custom) on experimaestro with fair comparison, a required-params manifest gate, resource budgeting, and a hyperparameter tuning search that recommends a configuration. Produces a validated BenchmarkConfig + experiment script; does NOT execute.
+description: Plan a cluster-ops benchmark (OpenSearch/SEISMIC/custom) on the native ClusterBench engine with fair comparison, a required-params manifest gate, resource budgeting, and a hyperparameter tuning search that recommends a configuration. Produces a validated BenchmarkConfig + experiment script; does NOT execute.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 user-invocable: true
 argument-hint: <domain> <hypothesis> — e.g. "opensearch 'force-merge to 1 segment speeds search'"
@@ -8,8 +8,8 @@ argument-hint: <domain> <hypothesis> — e.g. "opensearch 'force-merge to 1 segm
 
 # ClusterBench Planner
 
-The judgment layer for cluster-ops benchmarks built on the ClusterBench engine
-(`clusterbench_core` on experimaestro). Plans fair, reproducible, honest runs.
+The judgment layer for cluster-ops benchmarks built on the native ClusterBench
+engine (`clusterbench_core`). Plans fair, reproducible, honest runs.
 
 ## Core Principles (non-negotiable)
 

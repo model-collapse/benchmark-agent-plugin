@@ -13,7 +13,7 @@ clear PASS/FAIL with evidence.
 
 ## 0. What ClusterBench is (1 paragraph)
 
-An engine (`clusterbench_core`) built on **experimaestro** that runs benchmarks
+An engine (`clusterbench_core`) — a native, self-contained Apache-2.0 engine — that runs benchmarks
 through a disciplined lifecycle (resource budget → required-params manifest gate →
 3-phase preflight → cacheable prep → guarded measurement → functional validation →
 reliability tagging → persisted report), plus a **hyperparameter Tuner**
@@ -39,7 +39,7 @@ cd /home/ubuntu/auto-exp/clusterbench
 Verify the toolchain is present (all four must succeed):
 
 ```bash
-python -c "import experimaestro, opensearchpy, seismic, yaml; print('deps OK')"
+python -c "import opensearchpy, seismic, yaml; print('deps OK')"
 python -c "import seismic; print('seismic U30 =', seismic.get_seismic_string())"   # expect 'U30'
 docker info >/dev/null 2>&1 && echo "docker OK"                                     # needed for OpenSearch
 pip install -e . -q && echo "editable install OK"
@@ -52,16 +52,15 @@ If a dependency is missing, see **Troubleshooting** at the bottom before continu
 ## 2. Part A — Automated test suite (ground truth)
 
 ```bash
-# fast suite (engine, discipline, tuning, hook) — must be all green
+# fast suite (native engine, discipline, tuning, fairness, hook) — must be all green
+# includes the engine-integration tests in tests/engine/ that spawn a worker subprocess
 python -m pytest tests/ -q -m "not happy"
 # happy paths (real OpenSearch via Docker + real SEISMIC) — must be all green
 python -m pytest tests/ -q -m happy
-# experimaestro scheduler integration
-python -m pytest tests/ -q -m xpm
 ```
 
-**Expected:** fast suite ~60+ passed; happy = 2 passed; xpm = 2 passed. Zero
-failures. (First OpenSearch happy test boots a container; allow ~1–2 min.)
+**Expected:** fast suite 134 passed; happy = 3 passed. Zero failures. (First
+OpenSearch happy test boots a container; allow ~1–2 min.)
 
 ---
 
@@ -143,7 +142,7 @@ report containing a "What Went Wrong" section.
 ## 7. Acceptance criteria (checklist)
 
 - [ ] All deps import; `docker info` works; editable install succeeds.
-- [ ] Part A: fast + happy + xpm suites **all pass, zero failures**.
+- [ ] Part A: fast + happy suites **all pass, zero failures**.
 - [ ] Part B: OpenSearch run completes; p50 decreases with fewer segments;
       recommended `max_num_segments=1`; recall within 1pp; improvement > ~1.2x.
 - [ ] Part C: SEISMIC run completes; refine trajectory has > (coarse grid) trials;
