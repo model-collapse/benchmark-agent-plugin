@@ -11,21 +11,23 @@ from dataclasses import dataclass, field
 
 from clusterbench_core.model import ReliabilityTag, RunResult
 
-# Default reproduction tolerances (relative unless noted).
-# p99 is intentionally NOT a gate metric: from ~N<=1000 queries it is dominated
-# by tail noise and would cap good runs at QUALIFIED forever (it stays available
-# as a diagnostic). p50 is tightened to 10% (a clean bench has CV<5%); recall is
-# 0.5pp so it stays strictly inside the tuner's 1pp selection band.
-DEFAULT_TOLERANCES: dict[str, float] = {
-    "peak_rss_kb": 0.10,
+# Engine-generic default reproduction tolerances for the common latency/memory
+# metrics (relative). Domain/experiment-specific metrics (recall@10, build/merge
+# times, …) are declared on the config's `reproduction_tolerances`, keeping the
+# core metric-agnostic. A tolerance entry is either a float (relative) or
+# {"tol": x, "absolute": bool} — absolute is required for metrics near zero or
+# bounded in [0,1] (e.g. accuracy, recall) where a relative check is meaningless.
+DEFAULT_TOLERANCES: dict = {
     "p50_ms": 0.10,
     "p95_ms": 0.20,
-    "build_time_s": 0.30,
-    "forcemerge_s": 0.30,
-    "search_time_s": 0.20,
-    "recall@10": 0.005,  # absolute (percentage-point style)
+    "peak_rss_kb": 0.10,
 }
-_ABSOLUTE_METRICS = {"recall@10", "recall@100"}
+
+
+def _parse_tol(entry) -> tuple[float, bool]:
+    if isinstance(entry, dict):
+        return float(entry["tol"]), bool(entry.get("absolute", False))
+    return float(entry), False
 
 
 @dataclass
@@ -56,8 +58,8 @@ def reproduced_within_tolerance(
             av_f, bv_f = float(av), float(bv)
         except (TypeError, ValueError):
             continue
-        t = tol[m]
-        if m in _ABSOLUTE_METRICS:
+        t, absolute = _parse_tol(tol[m])
+        if absolute:
             ok = abs(av_f - bv_f) <= t
         else:
             denom = max(abs(av_f), 1e-9)

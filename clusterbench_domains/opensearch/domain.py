@@ -321,7 +321,7 @@ class OpenSearchDomain:
         actual_docs = self.client.count(index=index)["count"]
         hits_ok = all(len(a) > 0 for a in approx)
         passed = (actual_docs == expected_docs) and hits_ok
-        from clusterbench_core.discipline.metrics import recall_validation
+        from clusterbench_ops.splade import recall_validation
         return MeasureOutcome(metrics=metrics, phases=phases,
                               functional_validation=recall_validation(
                                   recall, k, passed, doc_count=actual_docs, expected_docs=expected_docs))

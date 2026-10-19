@@ -148,6 +148,9 @@ class BenchmarkConfig:
     baseline_run: str | None = None
     expected_diff_from_baseline: list[dict] = field(default_factory=list)
     repro_nonce: int = 0  # bump to force a fresh (reproduction) measurement
+    # per-metric reproduction tolerances (merged over defaults); lets a researcher's
+    # own metric be reproduction-gated. relative unless the metric is absolute (recall@*)
+    reproduction_tolerances: dict = field(default_factory=dict)
 
     # ---- freeze (Gate 1: mutate ⇒ new run) ----
     def freeze(self) -> "BenchmarkConfig":
@@ -183,6 +186,7 @@ class BenchmarkConfig:
             "baseline_run": self.baseline_run,
             "expected_diff_from_baseline": self.expected_diff_from_baseline,
             "repro_nonce": self.repro_nonce,
+            "reproduction_tolerances": self.reproduction_tolerances,
         }
 
     @classmethod
@@ -197,6 +201,7 @@ class BenchmarkConfig:
             baseline_run=d.get("baseline_run"),
             expected_diff_from_baseline=d.get("expected_diff_from_baseline") or [],
             repro_nonce=d.get("repro_nonce", 0),
+            reproduction_tolerances=d.get("reproduction_tolerances", {}),
         )
 
     # ---- signature / identity ----

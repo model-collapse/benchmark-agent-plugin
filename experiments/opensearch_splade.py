@@ -62,6 +62,8 @@ def build_base_config(n_docs=20_000, n_queries=500, vocab=30_000, avg_nnz=50,
         ControlledVar("index.codec", "default", verify="GET /<index>/_settings"),
     ]
     cfg.resource_budget = ResourceBudget(total_ram_kb=240 * 1024 * 1024, estimated_peak_kb=16 * 1024 * 1024)
+    cfg.reproduction_tolerances = {"recall@10": {"tol": 0.005, "absolute": True},
+                                   "ingest_s": 0.30, "forcemerge_s": 0.30}
     return cfg
 
 
