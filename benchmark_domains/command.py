@@ -195,4 +195,5 @@ class CommandDomain:
                                      produces=produces, metrics_from=metrics_from)
 
         cache_key = (name, cmd, tuple(sorted(referenced.items())), tuple(sorted(needs))) if cacheable else None
-        return Step(name=name, fn=fn, inputs=inputs, cache_key=cache_key, cacheable=cacheable)
+        return Step(name=name, fn=fn, inputs=inputs, cache_key=cache_key,
+                    cacheable=cacheable, parallel_safe=parallel_safe)

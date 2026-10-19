@@ -62,15 +62,23 @@ class Scheduler:
                     ready.remove(n)
 
             cacheable = [n for n in ready if by_name[n].cacheable]
-            measurement = [n for n in ready if not by_name[n].cacheable]
+            par_measure = [n for n in ready if not by_name[n].cacheable and by_name[n].parallel_safe]
+            ser_measure = [n for n in ready if not by_name[n].cacheable and not by_name[n].parallel_safe]
 
-            # cacheable: parallel
-            if cacheable:
+            def _pool(names):
                 with ThreadPoolExecutor(max_workers=max(1, self.max_parallel)) as ex:
-                    for n, r in zip(cacheable, ex.map(lambda n: self._run_one(by_name[n], results, workroot), cacheable)):
+                    for n, r in zip(names, ex.map(
+                            lambda n: self._run_one(by_name[n], results, workroot), names)):
                         results[n] = r
-            # measurement: serialized, strictly after cacheables in this wave
-            for n in measurement:
+
+            # cacheable (prep): parallel
+            if cacheable:
+                _pool(cacheable)
+            # parallel-safe measures (accuracy-only, no perf metric): parallel
+            if par_measure:
+                _pool(par_measure)
+            # performance measurement: serialized, strictly after the pools in this wave
+            for n in ser_measure:
                 results[n] = self._run_one(by_name[n], results, workroot)
 
             done |= set(ready)

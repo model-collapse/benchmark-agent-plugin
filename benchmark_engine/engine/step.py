@@ -28,6 +28,9 @@ class Step:
     cache_key: tuple | None = None   # identity for a cacheable step; None ⇒ not cached
     cacheable: bool = False
     depends_on: list[str] = field(default_factory=list)
+    # a non-cacheable (measurement) step that records NO comparability-sensitive
+    # performance metric may opt into running in parallel; perf measures stay serialized.
+    parallel_safe: bool = False
 
 
 @dataclass
