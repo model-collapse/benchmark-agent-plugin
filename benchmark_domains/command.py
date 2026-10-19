@@ -15,9 +15,13 @@ the engine's ``Scheduler`` + on-disk ``SignatureCache``.
 
 from __future__ import annotations
 
+import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
+
+_TOKEN = re.compile(r"\{([A-Za-z_][\w.]*)\}")
 
 from benchmark_engine.discipline.manifest import ManifestEntry
 from benchmark_engine.domain import MeasureOutcome, PrepArtifact
@@ -61,6 +65,48 @@ class CommandDomain:
                 verify=raw.get("verify", ""), impact_if_drift=raw.get("impact_if_drift", ""))
         return out
 
+    def validate(self, cfg: BenchmarkConfig) -> list[str]:
+        """Static DAG checks (run in preflight before any stage): unknown `needs`,
+        cycles, and `{placeholder}` tokens that are neither a declared param nor an
+        artifact produced by some stage."""
+        errors: list[str] = []
+        names = set(self._stages)
+        produced = {a for arts in self._produces.values() for a in arts}
+        valid_tokens = set(cfg.params) | produced
+
+        for s in self.spec.get("stages", []):
+            for dep in s.get("needs", []):
+                if dep not in names:
+                    errors.append(f"stage {s['name']!r} needs unknown stage {dep!r}")
+            scan = [s.get("cmd", "")]
+            for key in ("metrics_from", "effective_from"):
+                if isinstance(s.get(key), dict) and s[key].get("file"):
+                    scan.append(s[key]["file"])
+            for text in scan:
+                for tok in _TOKEN.findall(text):
+                    if tok not in valid_tokens:
+                        errors.append(f"stage {s['name']!r} references unknown placeholder {{{tok}}}")
+
+        # cycle detection over the needs-graph
+        edges = {s["name"]: [d for d in s.get("needs", []) if d in names]
+                 for s in self.spec.get("stages", [])}
+        done, stack = set(), set()
+
+        def _visit(n):
+            if n in done:
+                return False
+            if n in stack:
+                return True
+            stack.add(n)
+            cyc = any(_visit(m) for m in edges.get(n, []))
+            stack.discard(n)
+            done.add(n)
+            return cyc
+
+        if any(_visit(n) for n in edges):
+            errors.append("stage DAG has a cycle")
+        return errors
+
     def apply_config(self, cfg: BenchmarkConfig, ctx: Any) -> dict:
         return {}
 
@@ -69,7 +115,7 @@ class CommandDomain:
 
     def prep(self, cfg: BenchmarkConfig, ctx: Any) -> PrepArtifact:
         prep_stages = [s for s in self.spec.get("stages", []) if s.get("kind", "prep") == "prep"]
-        results = self._run_stages(prep_stages, cfg, upstream_artifacts={})
+        results = self._run_stages(prep_stages, cfg, upstream_artifacts={}, ctx=ctx)
         artifacts: dict[str, str] = {}
         for s in prep_stages:
             out = results[s["name"]].outputs
@@ -80,7 +126,7 @@ class CommandDomain:
     def measure(self, cfg: BenchmarkConfig, prep: PrepArtifact, ctx: Any) -> MeasureOutcome:
         measure_stages = [s for s in self.spec.get("stages", []) if s.get("kind") == "measure"]
         upstream = dict(prep.meta.get("artifacts", {}))
-        results = self._run_stages(measure_stages, cfg, upstream_artifacts=upstream)
+        results = self._run_stages(measure_stages, cfg, upstream_artifacts=upstream, ctx=ctx)
         metrics: dict[str, Any] = {}
         for s in measure_stages:
             metrics.update(results[s["name"]].metrics or {})
@@ -90,14 +136,36 @@ class CommandDomain:
         return MeasureOutcome(metrics=metrics, phases=[], functional_validation=fv)
 
     # ---- engine wiring ----
-    def _run_stages(self, stages: list[dict], cfg: BenchmarkConfig, upstream_artifacts: dict):
+    def _run_stages(self, stages: list[dict], cfg: BenchmarkConfig, upstream_artifacts: dict, ctx: Any = None):
         if not stages:
             return {}
         params = {p: cfg.get(p) for p in cfg.params}
         local_names = {s["name"] for s in stages}
         steps = [self._to_step(s, params, upstream_artifacts, local_names) for s in stages]
         subdir = "prep" if stages[0].get("kind", "prep") == "prep" else "measure"
-        return Scheduler(InProcessLauncher(), cache=self._cache).run(steps, self.workroot / subdir)
+        results = Scheduler(InProcessLauncher(), cache=self._cache).run(steps, self.workroot / subdir)
+        self._capture_effective(stages, subdir, ctx, results)
+        return results
+
+    def _capture_effective(self, stages, subdir, ctx, results):
+        """Gate 1: record each stage's point-of-use resolved config so the
+        effective-vs-declared gate can see a value the command actually used."""
+        if ctx is None or not hasattr(ctx, "effective"):
+            return
+        for s in stages:
+            ef = s.get("effective_from")
+            if not (isinstance(ef, dict) and ef.get("file")):
+                continue
+            p = Path(ef["file"])
+            if not p.is_absolute():
+                p = self.workroot / subdir / s["name"] / ef["file"]
+            if not p.exists():
+                cache_dir = (results.get(s["name"]).outputs or {}).get("cache_dir")
+                if cache_dir:
+                    p = Path(cache_dir) / ef["file"]
+            if p.exists():
+                for k, v in (json.loads(p.read_text()) or {}).items():
+                    ctx.effective(k, v)
 
     def _to_step(self, stage: dict, params: dict, upstream_artifacts: dict, local_names: set) -> Step:
         name = stage["name"]

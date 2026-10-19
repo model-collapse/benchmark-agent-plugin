@@ -127,6 +127,13 @@ def run_preflight(
     baseline: BenchmarkConfig | None = None,
     apply: bool = True,
 ) -> PreflightResult:
+    # Domain self-validation (e.g. CommandDomain stage-DAG checks) — runs before
+    # any apply so a malformed pipeline never touches the system.
+    if hasattr(domain, "validate"):
+        errs = domain.validate(cfg)
+        if errs:
+            return PreflightResult(None, None, None, False, "dag_validation:" + "; ".join(errs))
+
     # Phase A
     pa = baseline_diff(cfg, baseline) if baseline is not None else None
     if pa is not None and not pa.ok:
