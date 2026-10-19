@@ -84,7 +84,7 @@ def sweep(
     values: list[Any],
     domain,
     ctx=None,
-    workdir: str | Path = "./clusterbench_data/runs",
+    workdir: str | Path = "./benchmark_data/runs",
     primary_metric: str = "p50_ms",
     minimize: bool = True,
     quality_metric: str | None = "recall@10",

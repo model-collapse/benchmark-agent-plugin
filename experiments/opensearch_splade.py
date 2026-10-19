@@ -90,7 +90,7 @@ def run(workdir, cluster, segment_values=(16, 8, 4, 1), recall_tolerance_pp=0.01
 if __name__ == "__main__":
     import sys
 
-    wd = sys.argv[1] if len(sys.argv) > 1 else "./clusterbench_data/opensearch"
+    wd = sys.argv[1] if len(sys.argv) > 1 else "./benchmark_data/opensearch"
     cluster = OpenSearchCluster(heap="8g").start()
     try:
         res, info = run(wd, cluster)

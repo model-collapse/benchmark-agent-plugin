@@ -91,7 +91,7 @@ def run(workdir, recall_tolerance_pp=0.01, points=4, rounds=3, **base_kw):
 if __name__ == "__main__":
     import sys
 
-    wd = sys.argv[1] if len(sys.argv) > 1 else "./clusterbench_data/seismic"
+    wd = sys.argv[1] if len(sys.argv) > 1 else "./benchmark_data/seismic"
     res, info = run(wd)
     from benchmark_engine.report_index import update_index
     print(res.render())

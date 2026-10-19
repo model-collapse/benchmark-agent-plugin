@@ -58,7 +58,7 @@ def run_lifecycle(
     cfg: BenchmarkConfig,
     domain,
     ctx=None,
-    workdir: str | Path = "./clusterbench_data/runs",
+    workdir: str | Path = "./benchmark_data/runs",
     baseline: BenchmarkConfig | None = None,
     apply: bool = True,
     prior: RunResult | None = None,

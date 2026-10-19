@@ -16,6 +16,8 @@ _SECTIONS = [
     (ReliabilityTag.EXPLORATORY, "Exploratory Runs"),
 ]
 
+DEFAULT_WORKDIR = "./benchmark_data/runs"
+
 
 def update_index(workdir: str | Path) -> Path:
     workdir = Path(workdir)
@@ -31,14 +33,17 @@ def update_index(workdir: str | Path) -> Path:
         rows = [r for r in runs if r.get("reliability_tag") == tag.value]
         lines.append(f"## {title}")
         if rows:
-            lines.append("| Run ID | Status | p50_ms | recall@10 | Key |")
-            lines.append("|--------|--------|--------|-----------|-----|")
+            # metric-agnostic: columns are the sorted union of every metric name
+            # that appears in this section's runs — no hard-coded metric names.
+            cols = sorted({k for r in rows for k in (r.get("metrics") or {})})
+            header = ["Run ID", "Status", *cols]
+            lines.append("| " + " | ".join(header) + " |")
+            lines.append("|" + "|".join(["---"] * len(header)) + "|")
             for r in rows:
                 m = r.get("metrics", {})
-                fv = r.get("functional_validation", {})
-                key = m.get("forcemerge_s") or m.get("build_time_s") or ""
-                lines.append(f"| {r['run_id']} | {r['status']} | {m.get('p50_ms','-')} "
-                             f"| {fv.get('recall@10','-')} | {key} |")
+                cells = [str(r.get("run_id", "")), str(r.get("status", ""))]
+                cells += [str(m.get(c, "-")) for c in cols]
+                lines.append("| " + " | ".join(cells) + " |")
         else:
             lines.append("_none_")
         lines.append("")
