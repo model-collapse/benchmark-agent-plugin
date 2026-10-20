@@ -78,7 +78,8 @@ scenario-tuned required-params manifest. For richer logic, hand-write a Python
 - **Session resilience** — `run --detach` survives session death via nohup + `/loop`.
 - **Reliability tags** — RELIABLE / QUALIFIED / UNRELIABLE / EXPLORATORY; citations gated.
 - **Cross-session signature cache** — deterministic prep reused; measurement always re-run.
-- **Resource guardrails** — host-RSS OOM guard today; GPU/VRAM guardrails + GPU-hours/$ budgets are the next phase.
+- **Resource guardrails** — host-RSS OOM guard + **GPU/VRAM** guardrails (device pinning, VRAM-OOM fail-loud) and **GPU-hours/$ budgets** that halt a tuning sweep.
+- **ML-ready** — benchmark embedding/LLM pipelines via recipes (`embedding-train-eval`, `llm-finetune-eval`, `llm-eval-only`); seed-distribution replication, an accelerator fingerprint, and eval-suite comparability keep training/eval comparisons fair.
 
 ## Data directory
 

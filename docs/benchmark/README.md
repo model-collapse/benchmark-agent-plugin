@@ -36,8 +36,9 @@ plugin (the /benchmark skill) → benchmark_domains → benchmark_ops → benchm
     `reliability` (tags + reproduction + fail-loud), `analysis` (mandatory "What Went Wrong").
   - `tuning` — the **Tuner** (grid / refine / coordinate) with replication,
     effect>noise selection, and the **loop guard**.
-  - `measurement` (replication / MDE / CV), `guard` (OOM), `fingerprint` (env+code),
-    `report_index` (metric-agnostic results index + `load_runs`).
+  - `measurement` (replication / MDE / CV), `guard` (host-RSS OOM), `resources`
+    (GPU spec / device pinning / VRAM guard / GPU-hours+cost), `fingerprint`
+    (env + code + accelerator), `report_index` (metric-agnostic index + `load_runs`).
 - **benchmark_ops** — the `command` stage runner (shell stages + stdout/file/CSV metric
   extraction) and SPLADE encoding / recall ground truth.
 - **benchmark_domains** — `command` (generic N-stage DAG), `recipes/` (pre-filled
@@ -53,6 +54,28 @@ artifacts. `kind: prep` stages are signature-cached and reused across trials;
 or a JSON/CSV file) become the run's metrics. `needs:` forms the DAG; `effective_from`
 captures the resolved config a command actually used (point-of-use, for Gate 1). A
 **recipe** pre-fills stages plus a scenario-tuned required-params manifest.
+
+## GPU resources + accounting
+
+A stage may declare `resources: {gpus, vram_mb, est_gpu_hours}`. When `gpus > 0` the
+command runs with `CUDA_VISIBLE_DEVICES` pinned to `range(gpus)`, VRAM is checked
+after it runs (over budget ⇒ fail loud), and **gpu_hours** (and **cost**, if the
+config sets `cost.rate_per_gpu_hour`) are recorded as metrics. GPU probing is via
+pynvml → `nvidia-smi` → a null probe, so declaring GPU resources is safe on a CPU box
+(VRAM polling is a no-op; gpu_hours are still accounted by wall-time × gpus). The
+Tuner's `LoopBudget` accepts `max_gpu_hours`/`max_cost` and auto-halts a sweep once
+accumulated usage crosses them.
+
+## ML scenarios (embedding / LLM)
+
+Shipped recipes — `embedding_train_eval`, `llm_finetune_eval`, `llm_eval_only` —
+pre-fill train/eval stages (with GPU `resources`) and a **provenance** required-params
+manifest hard-gating `base_model`, `dataset`, `tokenizer`, `precision`, `seed`,
+`eval_suite`(+version). ML-aware fairness: the Tuner can replicate across a **seed**
+set (`seed_param` + `seeds`) so a win must beat across-seed noise, not a lucky seed;
+the fingerprint includes the **accelerator** (an A100 result isn't comparable to an
+H100 one); and `assert_comparable_eval` refuses comparisons across different eval
+suites/versions.
 
 ## Experiment-fairness (the differentiator)
 

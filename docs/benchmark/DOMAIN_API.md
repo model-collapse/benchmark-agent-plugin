@@ -48,6 +48,20 @@ cache miss); `metrics_from` reads stdout JSON or a JSON/CSV file; a measure stag
 that records no performance metric may set `parallel: true` to overlap siblings. The
 DAG is validated in preflight (no cycles, resolvable `needs`, known placeholders).
 
+**GPU resources.** A stage may add `resources: {gpus, vram_mb, est_gpu_hours}`. With
+`gpus > 0` it runs with `CUDA_VISIBLE_DEVICES` pinned to `range(gpus)`, VRAM is
+checked after the stage (over budget ⇒ fail loud), and `gpu_hours`/`cost` are
+recorded (set `cost.rate_per_gpu_hour` for cost). Safe on CPU-only boxes (null
+probe). Inject a fake probe in tests: `CommandDomain(spec, gpu_probe=my_probe)`.
+Cap a sweep with `Tuner(..., budget=LoopBudget(max_gpu_hours=..., max_cost=...))`.
+
+**ML recipes.** `load_recipe("embedding_train_eval" | "llm_finetune_eval" |
+"llm_eval_only")` gives train/eval stages + a provenance manifest that hard-gates
+`base_model`, `dataset`, `tokenizer`, `precision`, `seed`, `eval_suite`(+version).
+For stochastic training, replicate across seeds: `Tuner(..., seed_param="seed",
+seeds=[1,2,3,4])` — a win must beat the across-seed noise. The fingerprint includes
+the accelerator, and `assert_comparable_eval` refuses cross-eval-suite comparisons.
+
 Graduate to a Python `Domain` (below) when a stage needs real logic rather than a
 shell command.
 
