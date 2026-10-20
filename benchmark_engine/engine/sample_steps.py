@@ -22,6 +22,26 @@ def hog():
     return {"metrics": {}}
 
 
+def grow(target_mb=2000, chunk_mb=20, sleep_s=0.1, marker=""):
+    """A runaway allocator: grow resident memory in chunks toward `target_mb`,
+    recording how far it got in `marker`. Used to prove the OOM guard kills a
+    process before it exhausts host RAM — without the guard this would march all
+    the way to target_mb."""
+    import os
+    blocks = []
+    reached = 0
+    for _ in range(max(1, int(target_mb // chunk_mb))):
+        blocks.append(bytearray(chunk_mb * 1024 * 1024))  # zero-filled ⇒ resident now
+        reached += chunk_mb
+        if marker:
+            with open(marker, "w") as f:
+                f.write(str(reached))
+                f.flush()
+                os.fsync(f.fileno())   # survive a SIGKILL so the test can read it
+        time.sleep(sleep_s)
+    return {"metrics": {"reached_mb": reached}}
+
+
 def mem_report():
     import resource
     _ = bytearray(80 * 1024 * 1024)  # ~80 MB
