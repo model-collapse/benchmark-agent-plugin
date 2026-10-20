@@ -148,7 +148,8 @@ class Tuner:
                  quality_metric: str | None = "recall@10", quality_floor: float | None = None,
                  apply=True, budget: LoopBudget | None = None,
                  replicates: int = 1, mde: float = 0.03, cv_ceiling: float = 0.15,
-                 measure_in_subprocess: bool = False):
+                 measure_in_subprocess: bool = False,
+                 seed_param: str | None = None, seeds: list | None = None):
         self.base = base
         self.domain = domain
         self.workdir = workdir
@@ -162,6 +163,10 @@ class Tuner:
         self.mde = mde                          # minimum detectable (relative) effect
         self.cv_ceiling = cv_ceiling
         self.measure_in_subprocess = measure_in_subprocess
+        # seed-distribution replication: run the config once per seed (Gate 2),
+        # so a win must beat the across-seed noise, not a single lucky seed.
+        self.seed_param = seed_param
+        self.seeds = list(seeds) if seeds else []
         self._cache: dict[tuple, Trial] = {}
 
     # ---- guard state ----
@@ -211,13 +216,23 @@ class Tuner:
         if key in self._cache:
             return self._cache[key]
 
-        results = [self._run_once(coords, incumbent, treatment, rep) for rep in range(self.replicates)]
+        if self.seed_param and self.seeds:
+            # replicate set = one run per seed (the config's seed param varies)
+            results = []
+            for i, s in enumerate(self.seeds):
+                c = dict(coords)
+                c[self.seed_param] = s
+                results.append(self._run_once(c, incumbent, treatment, i))
+            n_expected = len(self.seeds)
+        else:
+            results = [self._run_once(coords, incumbent, treatment, rep) for rep in range(self.replicates)]
+            n_expected = self.replicates
         r0 = results[0]
         completed = [r for r in results if r.status is RunStatus.COMPLETED]
         for r in completed:   # accumulate resource usage for the GPU-hour/$ budgets
             self._gpu_hours += float(r.metrics.get("gpu_hours", 0.0) or 0.0)
             self._cost += float(r.metrics.get("cost", 0.0) or 0.0)
-        all_completed = len(completed) == self.replicates
+        all_completed = len(completed) == n_expected
 
         primaries = [self._metric(r, self.primary_metric) for r in completed]
         primaries = [p for p in primaries if p is not None]
@@ -225,7 +240,7 @@ class Tuner:
         primary = None
         if primaries:
             primary = statistics.median(primaries)
-            if self.replicates > 1 and len(primaries) > 1:
+            if n_expected > 1 and len(primaries) > 1:
                 from benchmark_engine.measurement import MeasureStats
                 sd = statistics.pstdev(primaries)
                 cv = sd / primary if primary else 0.0
