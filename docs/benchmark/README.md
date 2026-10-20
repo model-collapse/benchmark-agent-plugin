@@ -128,6 +128,8 @@ faster p50 at equal recall; SEISMIC heap_factor ≈ 1.4–2.2× faster within a 
 ```bash
 pytest -m "not happy"    # fast, deterministic tests, no external deps
 pytest -m happy          # end-to-end smoke: real OpenSearch (Docker) + SEISMIC
+pytest -m oom_fidelity   # high-fidelity OOM: a real cgroup (Docker --memory) proves
+                         # the guard preempts the kernel OOM-killer (0 vs >=1 oom_kills)
 ```
 The fast suite exercises the engine, discipline, both fairness gates, the loop guard,
 the CommandDomain pipeline (DAG, caching, metric extraction, validation), and recipes

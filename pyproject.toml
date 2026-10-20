@@ -27,5 +27,6 @@ include = ["benchmark_engine*", "benchmark_ops*", "benchmark_domains*"]
 markers = [
     "happy: opt-in end-to-end happy-path smoke tests (need Docker/SEISMIC)",
     "engine: native engine integration tests (spawn worker subprocess)",
+    "oom_fidelity: real cgroup OOM-killer vs guard (opt-in; needs Docker)",
 ]
 addopts = "-ra"
