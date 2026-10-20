@@ -30,7 +30,10 @@ from benchmark_engine.engine.launcher import InProcessLauncher
 from benchmark_engine.engine.scheduler import Scheduler
 from benchmark_engine.engine.step import Step, StepRef
 from benchmark_engine.model import BenchmarkConfig
+from benchmark_engine.resources import GpuSpec, default_probe
 from benchmark_ops.command import run_command_stage
+
+_RESOURCE_KEYS = ("gpu_hours", "cost")
 
 
 def _artifact_path(dep_outputs: dict, name: str) -> str:
@@ -45,7 +48,8 @@ def _artifact_path(dep_outputs: dict, name: str) -> str:
 
 
 class CommandDomain:
-    def __init__(self, spec: dict, name: str = "command", workroot: str | None = None):
+    def __init__(self, spec: dict, name: str = "command", workroot: str | None = None,
+                 gpu_probe=None):
         self.spec = spec
         self.name = name
         self.workroot = Path(workroot) if workroot else Path(tempfile.mkdtemp(prefix="cmddomain_"))
@@ -53,6 +57,7 @@ class CommandDomain:
         self._cache = SignatureCache(self.workroot / "_command_cache")
         self._stages = {s["name"]: s for s in spec.get("stages", [])}
         self._produces = {s["name"]: list(s.get("produces", [])) for s in spec.get("stages", [])}
+        self._probe = gpu_probe if gpu_probe is not None else default_probe()
 
     # ---- Domain protocol ----
     def required_params(self) -> dict:
@@ -117,19 +122,31 @@ class CommandDomain:
         prep_stages = [s for s in self.spec.get("stages", []) if s.get("kind", "prep") == "prep"]
         results = self._run_stages(prep_stages, cfg, upstream_artifacts={}, ctx=ctx)
         artifacts: dict[str, str] = {}
+        resource_metrics: dict[str, float] = {}
         for s in prep_stages:
-            out = results[s["name"]].outputs
+            res = results[s["name"]]
+            out = res.outputs
             for name in self._produces[s["name"]]:
                 artifacts[name] = _artifact_path(out, name)
-        return PrepArtifact(kind="command", meta={"artifacts": artifacts})
+            for k in _RESOURCE_KEYS:   # a cache HIT consumed no new GPU time → no metric
+                if k in (res.metrics or {}):
+                    resource_metrics[k] = resource_metrics.get(k, 0.0) + res.metrics[k]
+        return PrepArtifact(kind="command",
+                            meta={"artifacts": artifacts, "resource_metrics": resource_metrics})
 
     def measure(self, cfg: BenchmarkConfig, prep: PrepArtifact, ctx: Any) -> MeasureOutcome:
         measure_stages = [s for s in self.spec.get("stages", []) if s.get("kind") == "measure"]
         upstream = dict(prep.meta.get("artifacts", {}))
         results = self._run_stages(measure_stages, cfg, upstream_artifacts=upstream, ctx=ctx)
         metrics: dict[str, Any] = {}
+        resource_metrics: dict[str, float] = dict(prep.meta.get("resource_metrics", {}))
         for s in measure_stages:
-            metrics.update(results[s["name"]].metrics or {})
+            for k, v in (results[s["name"]].metrics or {}).items():
+                if k in _RESOURCE_KEYS:   # sum resource usage across stages
+                    resource_metrics[k] = resource_metrics.get(k, 0.0) + v
+                else:
+                    metrics[k] = v
+        metrics.update(resource_metrics)
         fv = {"passed": True}
         if "passed" in metrics:
             fv["passed"] = metrics.pop("passed")
@@ -180,6 +197,8 @@ class CommandDomain:
         metrics_from = stage.get("metrics_from")
         cacheable = stage.get("kind", "prep") == "prep"
         parallel_safe = bool(stage.get("parallel"))
+        gpu = GpuSpec.from_dict(stage.get("resources"))
+        rate = float(params.get("cost.rate_per_gpu_hour", 0.0) or 0.0)
         referenced = {p: v for p, v in params.items() if ("{" + p + "}") in cmd}
 
         # Only same-run deps get a StepRef (so the scheduler topo-orders them);
@@ -197,7 +216,8 @@ class CommandDomain:
                     arts[art_name] = _artifact_path(dep_out, art_name)
             wd = self.workroot / ("prep" if cacheable else "measure") / name
             return run_command_stage(cmd, params, arts, workdir=str(wd),
-                                     produces=produces, metrics_from=metrics_from)
+                                     produces=produces, metrics_from=metrics_from,
+                                     gpu=gpu, probe=self._probe, rate_per_gpu_hour=rate)
 
         cache_key = self._prep_key(name, params, {}) if cacheable else None
         return Step(name=name, fn=fn, inputs=inputs, cache_key=cache_key,

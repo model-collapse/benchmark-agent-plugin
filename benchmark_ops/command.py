@@ -15,10 +15,15 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import shlex
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
+
+from benchmark_engine.resources import (
+    GpuSpec, NullProbe, cost, gpu_hours, pin_env, vram_check)
 
 
 class CommandStageError(RuntimeError):
@@ -101,14 +106,18 @@ def _coerce(v: Any) -> Any:
 
 def run_command_stage(cmd: str, params: dict, artifacts: dict, workdir: str,
                       produces: list[str] | None = None,
-                      metrics_from: dict | None = None) -> dict:
+                      metrics_from: dict | None = None,
+                      gpu: GpuSpec | None = None, probe=None,
+                      rate_per_gpu_hour: float = 0.0) -> dict:
     """Run one stage command. Returns a step-fn dict with ``outputs`` (produced
-    artifact paths + a ``descriptor`` map) and, if ``metrics_from`` is set,
-    ``metrics``. Non-zero exit → CommandStageError."""
+    artifact paths + a ``descriptor`` map) and, if ``metrics_from`` is set or GPU
+    accounting applies, ``metrics``. Non-zero exit → CommandStageError;
+    over-budget VRAM → VramExceeded. When ``gpu.gpus > 0`` the command runs with
+    CUDA_VISIBLE_DEVICES pinned to range(gpu.gpus), VRAM is checked after it runs,
+    and gpu_hours (and cost, if a rate is set) are recorded."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
 
-    # artifact paths default to <workdir>/<name> unless supplied in `artifacts`
     produces = produces or []
     resolved_artifacts = dict(artifacts)
     for name in produces:
@@ -117,11 +126,19 @@ def run_command_stage(cmd: str, params: dict, artifacts: dict, workdir: str,
     values = {**params, **resolved_artifacts}
     final_cmd = _substitute(cmd, values)
 
+    device_ids = list(range(gpu.gpus)) if (gpu and gpu.gpus > 0) else []
+    env = pin_env(dict(os.environ), device_ids) if device_ids else None
+
+    t0 = time.time()
     proc = subprocess.run(final_cmd, shell=True, cwd=str(workdir),
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, env=env)
+    elapsed = time.time() - t0
     if proc.returncode != 0:
         raise CommandStageError(
             f"stage command exited {proc.returncode}: {final_cmd}\n{proc.stderr}")
+
+    if device_ids:   # fail loud on a VRAM over-budget peak (post-stage poll)
+        vram_check(probe or NullProbe(), device_ids, gpu.vram_mb)
 
     outputs: dict[str, Any] = {}
     descriptor: dict[str, Any] = {}
@@ -131,10 +148,19 @@ def run_command_stage(cmd: str, params: dict, artifacts: dict, workdir: str,
         descriptor[name] = _descriptor(path)
     outputs["descriptor"] = descriptor
 
-    result: dict[str, Any] = {"outputs": outputs}
+    metrics: dict[str, Any] = {}
     if metrics_from is not None:
         spec = dict(metrics_from)
         if spec.get("stdout"):
             spec["_stdout"] = proc.stdout
-        result["metrics"] = extract_metrics(spec, str(workdir))
+        metrics.update(extract_metrics(spec, str(workdir)))
+    if gpu and gpu.gpus > 0:   # resource accounting (not a science metric)
+        gh = gpu_hours(gpu.gpus, elapsed)
+        metrics["gpu_hours"] = gh
+        if rate_per_gpu_hour:
+            metrics["cost"] = cost(gh, rate_per_gpu_hour)
+
+    result: dict[str, Any] = {"outputs": outputs}
+    if metrics:
+        result["metrics"] = metrics
     return result
