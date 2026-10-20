@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark_engine.resources import (
-    GpuSpec, NullProbe, cost, gpu_hours, pin_env, vram_check)
+    GpuSpec, NullProbe, VramExceeded, cost, gpu_hours, pin_env)
 
 
 class CommandStageError(RuntimeError):
@@ -130,15 +130,32 @@ def run_command_stage(cmd: str, params: dict, artifacts: dict, workdir: str,
     env = pin_env(dict(os.environ), device_ids) if device_ids else None
 
     t0 = time.time()
-    proc = subprocess.run(final_cmd, shell=True, cwd=str(workdir),
-                          capture_output=True, text=True, env=env)
+    if device_ids:
+        # GPU stage: sample VRAM live while the child runs so we observe its PEAK,
+        # not the (freed) memory after it exits.
+        _p = probe or NullProbe()
+        proc = subprocess.Popen(final_cmd, shell=True, cwd=str(workdir),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, env=env)
+        peak_mb = 0
+        while proc.poll() is None:
+            peak_mb = max(peak_mb, _p.used_mb(device_ids))
+            time.sleep(0.05)
+        stdout, stderr = proc.communicate()
+        peak_mb = max(peak_mb, _p.used_mb(device_ids))
+        returncode = proc.returncode
+    else:
+        r = subprocess.run(final_cmd, shell=True, cwd=str(workdir),
+                           capture_output=True, text=True)
+        stdout, stderr, returncode, peak_mb = r.stdout, r.stderr, r.returncode, 0
     elapsed = time.time() - t0
-    if proc.returncode != 0:
-        raise CommandStageError(
-            f"stage command exited {proc.returncode}: {final_cmd}\n{proc.stderr}")
 
-    if device_ids:   # fail loud on a VRAM over-budget peak (post-stage poll)
-        vram_check(probe or NullProbe(), device_ids, gpu.vram_mb)
+    if returncode != 0:
+        raise CommandStageError(
+            f"stage command exited {returncode}: {final_cmd}\n{stderr}")
+    if device_ids and gpu.vram_mb is not None and peak_mb > gpu.vram_mb:   # fail loud on VRAM-OOM
+        raise VramExceeded(
+            f"VRAM peak {peak_mb}MB exceeded budget {gpu.vram_mb}MB on devices {device_ids}")
 
     outputs: dict[str, Any] = {}
     descriptor: dict[str, Any] = {}
@@ -152,7 +169,7 @@ def run_command_stage(cmd: str, params: dict, artifacts: dict, workdir: str,
     if metrics_from is not None:
         spec = dict(metrics_from)
         if spec.get("stdout"):
-            spec["_stdout"] = proc.stdout
+            spec["_stdout"] = stdout
         metrics.update(extract_metrics(spec, str(workdir)))
     if gpu and gpu.gpus > 0:   # resource accounting (not a science metric)
         gh = gpu_hours(gpu.gpus, elapsed)

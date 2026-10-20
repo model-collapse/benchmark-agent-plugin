@@ -217,12 +217,17 @@ class Tuner:
             return self._cache[key]
 
         if self.seed_param and self.seeds:
-            # replicate set = one run per seed (the config's seed param varies)
+            # replicate set = one run per seed (the config's seed param varies).
+            # The seed is a controlled replicate, NOT a treatment: mirror it into the
+            # baseline too, or Phase A would flag it as an unexpected baseline diff
+            # and abort every seeded run.
             results = []
             for i, s in enumerate(self.seeds):
                 c = dict(coords)
                 c[self.seed_param] = s
-                results.append(self._run_once(c, incumbent, treatment, i))
+                inc = dict(incumbent)
+                inc[self.seed_param] = s
+                results.append(self._run_once(c, inc, treatment, i))
             n_expected = len(self.seeds)
         else:
             results = [self._run_once(coords, incumbent, treatment, rep) for rep in range(self.replicates)]

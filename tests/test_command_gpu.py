@@ -40,6 +40,20 @@ def test_vram_oom_fails_loud(tmp_path):
     assert lr.result.status.value != "COMPLETED"      # VRAM-OOM aborts, not a clean run
 
 
+def test_vram_polled_during_stage(tmp_path):   # review Important 3: live poll, not post-exit
+    class Counter:
+        def __init__(self):
+            self.calls = 0
+
+        def used_mb(self, device_ids):
+            self.calls += 1
+            return 1000               # within budget → no raise; we assert it was polled
+    p = Counter()
+    d = CommandDomain(_spec(), workroot=str(tmp_path / "c"), gpu_probe=p)
+    run_lifecycle(_cfg(), d, workdir=str(tmp_path / "r"), baseline=_cfg())
+    assert p.calls > 1               # polled repeatedly DURING the stage, not once after exit
+
+
 def test_cuda_visible_devices_pinned(tmp_path):
     spec = {"stages": [
         {"name": "probe", "cmd": "echo \"{\\\"v\\\": \\\"${CUDA_VISIBLE_DEVICES:-unset}\\\"}\"",

@@ -95,6 +95,22 @@ def run_lifecycle(
             return aborted(RunStatus.ABORTED_PREFLIGHT,
                            "manifest: missing " + ",".join(m.path for m in chk.missing))
 
+    # Eval-suite comparability (ML): a run evaluated on a different eval suite or
+    # version than its declared baseline is not comparable — refuse with an
+    # attributable reason rather than silently comparing.
+    if baseline is not None:
+        from benchmark_engine.fingerprint import (
+            BaselineFingerprintMismatch, assert_comparable_eval)
+        bmeta = {"eval_suite": baseline.get("eval_suite"),
+                 "eval_suite_version": baseline.get("eval_suite_version")}
+        cmeta = {"eval_suite": cfg.get("eval_suite"),
+                 "eval_suite_version": cfg.get("eval_suite_version")}
+        if any(bmeta.values()) or any(cmeta.values()):
+            try:
+                assert_comparable_eval(bmeta, cmeta)
+            except BaselineFingerprintMismatch as e:
+                return aborted(RunStatus.ABORTED_PREFLIGHT, f"eval_suite mismatch: {e}")
+
     # Step 3 — preflight A/B/C
     pf = preflight.run_preflight(cfg, domain, ctx, baseline=baseline, apply=apply)
     if not pf.passed:

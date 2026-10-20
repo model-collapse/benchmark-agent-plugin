@@ -25,8 +25,11 @@ class GpuSpec:
     @classmethod
     def from_dict(cls, d: dict | None) -> "GpuSpec":
         d = d or {}
+        vram_mb = d.get("vram_mb")
+        if vram_mb is None and d.get("vram_gb") is not None:   # accept GB (spec examples use it)
+            vram_mb = int(float(d["vram_gb"]) * 1000)
         return cls(gpus=int(d.get("gpus", 0)),
-                   vram_mb=d.get("vram_mb"),
+                   vram_mb=vram_mb,
                    est_gpu_hours=d.get("est_gpu_hours"))
 
 

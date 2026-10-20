@@ -8,6 +8,10 @@ def test_gpuspec_from_dict():
     assert GpuSpec.from_dict(None).gpus == 0
 
 
+def test_gpuspec_accepts_vram_gb():   # review: spec examples use vram_gb; must not silently disable guard
+    assert GpuSpec.from_dict({"gpus": 1, "vram_gb": 72}).vram_mb == 72000
+
+
 def test_pin_env_sets_visible_devices():
     env = pin_env({"PATH": "/x"}, [0, 2, 3])
     assert env["CUDA_VISIBLE_DEVICES"] == "0,2,3"

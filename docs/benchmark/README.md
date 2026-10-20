@@ -63,8 +63,9 @@ after it runs (over budget ⇒ fail loud), and **gpu_hours** (and **cost**, if t
 config sets `cost.rate_per_gpu_hour`) are recorded as metrics. GPU probing is via
 pynvml → `nvidia-smi` → a null probe, so declaring GPU resources is safe on a CPU box
 (VRAM polling is a no-op; gpu_hours are still accounted by wall-time × gpus). The
-Tuner's `LoopBudget` accepts `max_gpu_hours`/`max_cost` and auto-halts a sweep once
-accumulated usage crosses them.
+Tuner's `LoopBudget` accepts `max_gpu_hours`/`max_cost`; the sweep stops launching
+new trials after the trial whose accumulated (completed-run) usage crosses the
+budget — a stop-launching guard, not a mid-trial cap.
 
 ## ML scenarios (embedding / LLM)
 
