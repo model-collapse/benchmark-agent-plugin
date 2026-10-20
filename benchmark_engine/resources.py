@@ -39,6 +39,21 @@ def pin_env(base_env: dict, device_ids: list[int]) -> dict:
     return env
 
 
+class VramExceeded(RuntimeError):
+    """A stage's VRAM usage exceeded its declared budget."""
+
+
+def vram_check(probe: "VramProbe", device_ids: list[int], vram_mb: int | None) -> None:
+    """Fail loud if the probe reports VRAM usage above the budget. A None budget
+    or an unknown/zero probe reading is a no-op (CPU box / no probe)."""
+    if vram_mb is None:
+        return
+    used = probe.used_mb(device_ids)
+    if used and used > vram_mb:
+        raise VramExceeded(
+            f"VRAM {used}MB exceeded budget {vram_mb}MB on devices {device_ids}")
+
+
 def gpu_hours(gpus: int, seconds: float) -> float:
     return gpus * seconds / 3600.0
 
