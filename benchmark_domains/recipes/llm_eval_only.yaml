@@ -1,0 +1,20 @@
+# Recipe: llm-eval-only — evaluate a fixed model (no training). Replace the echo
+# placeholder with your real eval harness. The treatment is typically a decoding
+# knob (temperature, max_tokens) you sweep for speed/quality.
+treatment_variable: decode.temperature
+
+stages:
+  - name: eval
+    kind: measure
+    cmd: "echo '{\"mmlu_acc\": 0.63, \"tokens_per_s\": 1800.0}'"
+    metrics_from: {stdout: true, fields: [mmlu_acc, tokens_per_s]}
+    resources: {gpus: 1, vram_mb: 80000}
+
+required_params:
+  base_model: {baseline_value: "meta-llama/Llama-3.1-8B-Instruct", reason: "the model under eval"}
+  dataset: {baseline_value: "cais/mmlu", reason: "eval data identity"}
+  tokenizer: {baseline_value: "meta-llama/Llama-3.1-8B-Instruct", reason: "tokenization affects results"}
+  precision: {baseline_value: "bf16", reason: "fp precision changes speed AND quality"}
+  seed: {baseline_value: 0, reason: "decoding can be stochastic; seed must be declared"}
+  eval_suite: {baseline_value: "lm-eval-harness", reason: "scores comparable only within one suite+version"}
+  eval_suite_version: {baseline_value: "0.4.3", reason: "suite version affects scores"}

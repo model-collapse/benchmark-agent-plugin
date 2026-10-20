@@ -1,0 +1,32 @@
+# Recipe: llm-finetune-eval — data_prep → SFT/LoRA train → eval. Replace the echo
+# placeholders with your real tools (e.g. torchrun + lm-eval-harness). GPU
+# resources declared; Null probe keeps it CPU-safe for CI.
+treatment_variable: train.lr
+
+stages:
+  - name: data_prep
+    kind: prep
+    cmd: "echo 'prepared {dataset} tok={tokenizer}' > {train_data}"
+    produces: [train_data]
+  - name: train
+    kind: prep
+    needs: [data_prep]
+    cmd: "echo 'ft base={base_model} data={train_data} prec={precision} seed={seed} lr={train.lr}' > {ckpt}"
+    produces: [ckpt]
+    resources: {gpus: 4, vram_mb: 72000, est_gpu_hours: 6}
+    effective_from: {file: resolved.json}
+  - name: eval
+    kind: measure
+    needs: [train]
+    cmd: "echo '{\"mmlu_acc\": 0.63, \"gsm8k_acc\": 0.41}'"
+    metrics_from: {stdout: true, fields: [mmlu_acc, gsm8k_acc]}
+    resources: {gpus: 1, vram_mb: 40000}
+
+required_params:
+  base_model: {baseline_value: "meta-llama/Llama-3.1-8B", reason: "the base being fine-tuned"}
+  dataset: {baseline_value: "tatsu-lab/alpaca", reason: "training data identity"}
+  tokenizer: {baseline_value: "meta-llama/Llama-3.1-8B", reason: "tokenization affects results"}
+  precision: {baseline_value: "bf16", reason: "fp precision changes speed AND quality"}
+  seed: {baseline_value: 0, reason: "training is stochastic; seed must be fixed/declared"}
+  eval_suite: {baseline_value: "lm-eval-harness", reason: "scores comparable only within one suite+version"}
+  eval_suite_version: {baseline_value: "0.4.3", reason: "suite version affects scores"}

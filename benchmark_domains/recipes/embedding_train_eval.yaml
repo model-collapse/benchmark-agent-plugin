@@ -1,0 +1,29 @@
+# Recipe: embedding-train-eval — fine-tune an embedding model, then eval retrieval
+# quality. Replace the echo placeholders with your real trainer/eval tools. GPU
+# resources are declared; on a CPU box the Null probe makes them safe (gpu_hours
+# are still accounted by wall-time × gpus).
+treatment_variable: train.lr
+
+stages:
+  - name: train
+    kind: prep
+    cmd: "echo 'trained base={base_model} data={dataset} tok={tokenizer} prec={precision} seed={seed} lr={train.lr}' > {ckpt}"
+    produces: [ckpt]
+    resources: {gpus: 1, vram_mb: 40000, est_gpu_hours: 1}
+    effective_from: {file: resolved.json}
+  - name: eval
+    kind: measure
+    needs: [train]
+    cmd: "echo '{\"ndcg@10\": 0.5}'"
+    metrics_from: {stdout: true, fields: ["ndcg@10"]}
+    resources: {gpus: 1, vram_mb: 40000}
+
+# Provenance HARD gate: a silent change to any of these invalidates comparisons.
+required_params:
+  base_model: {baseline_value: "intfloat/e5-base-v2", reason: "the model being fine-tuned"}
+  dataset: {baseline_value: "beir/scifact", reason: "training/eval data identity"}
+  tokenizer: {baseline_value: "intfloat/e5-base-v2", reason: "tokenization affects results"}
+  precision: {baseline_value: "bf16", reason: "fp precision changes speed AND quality"}
+  seed: {baseline_value: 0, reason: "training is stochastic; seed must be fixed/declared"}
+  eval_suite: {baseline_value: "beir", reason: "scores are only comparable within one suite+version"}
+  eval_suite_version: {baseline_value: "1.0", reason: "suite version affects scores"}
