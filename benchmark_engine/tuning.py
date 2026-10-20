@@ -40,6 +40,8 @@ class HaltReason(str, Enum):
     BUDGET_TRIALS = "BUDGET_TRIALS"
     BUDGET_WALLCLOCK = "BUDGET_WALLCLOCK"
     BUDGET_ABORTS = "BUDGET_ABORTS"
+    BUDGET_GPU_HOURS = "BUDGET_GPU_HOURS"
+    BUDGET_COST = "BUDGET_COST"
     NO_PROGRESS = "NO_PROGRESS"
 
 
@@ -55,6 +57,8 @@ class LoopBudget:
     max_aborts: int = 5
     streak_k: int = 3
     no_progress_m: int = 5
+    max_gpu_hours: float | None = None   # auto-halt once accumulated GPU-hours cross this
+    max_cost: float | None = None        # auto-halt once accumulated $cost crosses this
 
 
 @dataclass
@@ -167,6 +171,8 @@ class Tuner:
         self._streak = 0
         self._aborts = 0
         self._since_improve = 0
+        self._gpu_hours = 0.0
+        self._cost = 0.0
         self._wall_start = time.time()
         self._halt: HaltReason | None = None
         self._max_trials = min(max_trials, self.budget.hard_cap) \
@@ -208,6 +214,9 @@ class Tuner:
         results = [self._run_once(coords, incumbent, treatment, rep) for rep in range(self.replicates)]
         r0 = results[0]
         completed = [r for r in results if r.status is RunStatus.COMPLETED]
+        for r in completed:   # accumulate resource usage for the GPU-hour/$ budgets
+            self._gpu_hours += float(r.metrics.get("gpu_hours", 0.0) or 0.0)
+            self._cost += float(r.metrics.get("cost", 0.0) or 0.0)
         all_completed = len(completed) == self.replicates
 
         primaries = [self._metric(r, self.primary_metric) for r in completed]
@@ -270,6 +279,10 @@ class Tuner:
             self._halt = HaltReason.BUDGET_TRIALS
         elif (time.time() - self._wall_start) >= b.wall_budget_s:
             self._halt = HaltReason.BUDGET_WALLCLOCK
+        elif b.max_gpu_hours is not None and self._gpu_hours >= b.max_gpu_hours:
+            self._halt = HaltReason.BUDGET_GPU_HOURS
+        elif b.max_cost is not None and self._cost >= b.max_cost:
+            self._halt = HaltReason.BUDGET_COST
         elif self._since_improve >= b.no_progress_m:
             self._halt = HaltReason.NO_PROGRESS
         return self._halt
@@ -402,5 +415,7 @@ def _halt_message(reason: HaltReason) -> str:
         HaltReason.BUDGET_TRIALS: "trial budget exhausted",
         HaltReason.BUDGET_WALLCLOCK: "wall-clock budget exhausted",
         HaltReason.BUDGET_ABORTS: "abort budget exhausted",
+        HaltReason.BUDGET_GPU_HOURS: "GPU-hour budget exhausted",
+        HaltReason.BUDGET_COST: "cost budget exhausted",
         HaltReason.NO_PROGRESS: "no comparable trial improved over the last M trials",
     }[reason]
