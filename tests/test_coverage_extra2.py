@@ -5,8 +5,8 @@ import subprocess
 import sys
 import time
 
-from clusterbench_core.guard import GuardAction, monitor_process
-from clusterbench_core.model import ResourceBudget
+from benchmark_engine.guard import GuardAction, monitor_process
+from benchmark_engine.model import ResourceBudget
 
 
 def test_guard_kills_real_overbudget_process():

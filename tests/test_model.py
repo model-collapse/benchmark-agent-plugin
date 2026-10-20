@@ -1,4 +1,4 @@
-from clusterbench_core.model import (
+from benchmark_engine.model import (
     BenchmarkConfig,
     ControlledVar,
     Param,
@@ -91,7 +91,7 @@ def test_runresult_roundtrip():
 
 def test_frozen_config_rejects_set_param():
     import pytest
-    from clusterbench_core.model import FrozenConfigError
+    from benchmark_engine.model import FrozenConfigError
     cfg = make_cfg().freeze()
     with pytest.raises(FrozenConfigError):
         cfg.set_param("seismic.n_postings", 1)
@@ -100,7 +100,7 @@ def test_frozen_config_rejects_set_param():
 
 def test_assert_unchanged_detects_direct_mutation():
     import pytest
-    from clusterbench_core.model import FrozenConfigError, Param
+    from benchmark_engine.model import FrozenConfigError, Param
     cfg = make_cfg().freeze()
     cfg.params["seismic.n_postings"] = Param(value=999)  # bypass set_param
     with pytest.raises(FrozenConfigError):

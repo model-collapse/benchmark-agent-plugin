@@ -1,0 +1,27 @@
+# Recipe: retrieval-index — build an index, then measure search speed/quality.
+# A CPU reference recipe. Replace the two commands with your real build/search
+# tools; the engine supplies fair comparison, caching, preflight and the gate.
+# treatment_variable defaults to a benign knob so an override demonstrably takes
+# effect; the canonical retrieval knob is forcemerge.max_num_segments.
+treatment_variable: query.k
+
+stages:
+  - name: build
+    kind: prep
+    cmd: "echo index-of-{corpus.n_docs}-docs > {index}"
+    produces: [index]
+  - name: search
+    kind: measure
+    needs: [build]
+    cmd: "echo '{\"p50_ms\": 10.0, \"recall@10\": 1.0}'"
+    metrics_from:
+      stdout: true
+      fields: [p50_ms, "recall@10"]
+
+# Required-params manifest (HARD GATE): a config built from this recipe must
+# declare these explicitly, even at their default, so a silent change can't
+# invalidate a comparison.
+required_params:
+  corpus.n_docs:
+    reason: "corpus size sets index scale; a silent change makes runs incomparable"
+    baseline_value: 20000

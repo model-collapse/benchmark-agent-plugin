@@ -2,9 +2,9 @@
 """Loop guard: the search never recommends from an unfair trial, halts (and ASKs)
 on a broken experiment, respects budgets, stops on no-progress, and terminates."""
 
-from clusterbench_core.domain import MeasureOutcome, PrepArtifact
-from clusterbench_core.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
-from clusterbench_core.tuning import HaltReason, LoopBudget, TuneDim, Tuner
+from benchmark_engine.domain import MeasureOutcome, PrepArtifact
+from benchmark_engine.model import BenchmarkConfig, PhaseMetrics, ResourceBudget, TreatmentVariable
+from benchmark_engine.tuning import HaltReason, LoopBudget, TuneDim, Tuner
 
 
 class GateDomain:

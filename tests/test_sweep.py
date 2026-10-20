@@ -1,5 +1,5 @@
-from clusterbench_core.sweep import sweep
-from clusterbench_core.model import RunStatus
+from benchmark_engine.sweep import sweep
+from benchmark_engine.model import RunStatus
 
 from conftest import FakeDomain, make_base_config
 
@@ -37,7 +37,7 @@ def test_sweep_respects_quality_floor(tmp_path):
 def test_sweep_skips_oom_points(tmp_path):
     base = make_base_config(0.4)
     base.treatment_variable.baseline_value = 0.4
-    from clusterbench_core.model import ResourceBudget
+    from benchmark_engine.model import ResourceBudget
     base.resource_budget = ResourceBudget(total_ram_kb=10_000)
     sr = sweep(base, values=[0.4, 0.7, 1.0], domain=FakeDomain(oom_at=1.0),
                workdir=tmp_path, quality_metric=None, quality_floor=None)

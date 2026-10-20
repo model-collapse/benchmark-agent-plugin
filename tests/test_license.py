@@ -22,4 +22,4 @@ def test_license_is_apache():
 
 def test_xpm_module_removed():
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("clusterbench_core.xpm")
+        importlib.import_module("benchmark_engine.xpm")

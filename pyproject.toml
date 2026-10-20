@@ -3,6 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
+# legacy distribution name; import packages are benchmark_engine/ops/domains
 name = "clusterbench"
 version = "0.1.0"
 description = "Cluster-ops benchmarking framework with a native Apache-2.0 execution engine and the model-collapse discipline layer."
@@ -20,7 +21,7 @@ splade = ["torch", "transformers"]
 dev = ["pytest>=7", "pytest-timeout"]
 
 [tool.setuptools.packages.find]
-include = ["clusterbench_core*", "clusterbench_ops*", "clusterbench_domains*"]
+include = ["benchmark_engine*", "benchmark_ops*", "benchmark_domains*"]
 
 [tool.pytest.ini_options]
 markers = [

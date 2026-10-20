@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from clusterbench_core.discipline.reliability import fairness_assert
-from clusterbench_core.lifecycle import run_lifecycle
-from clusterbench_core.model import ReliabilityTag, RunResult, RunStatus
+from benchmark_engine.discipline.reliability import fairness_assert
+from benchmark_engine.lifecycle import run_lifecycle
+from benchmark_engine.model import ReliabilityTag, RunResult, RunStatus
 
 from conftest import FakeDomain, make_base_config
 
@@ -32,7 +32,7 @@ def test_fairness_assert_ok_when_unreliable():
 
 
 def test_lifecycle_freezes_config(tmp_path):
-    from clusterbench_core.model import FrozenConfigError
+    from benchmark_engine.model import FrozenConfigError
     import pytest
     cfg = make_base_config(0.9)
     run_lifecycle(cfg, FakeDomain(), workdir=tmp_path, baseline=make_base_config(0.7))
